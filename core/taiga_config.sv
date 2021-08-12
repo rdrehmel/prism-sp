@@ -48,6 +48,9 @@ package taiga_config;
     localparam USE_MUL = 1;
     localparam USE_DIV = 1;
 
+	// SP Unit 
+	localparam USE_SP = 1;
+
     //Division algorithm selection
     typedef enum {
         RADIX_2,//Smallest
@@ -92,8 +95,8 @@ package taiga_config;
     localparam MEMORY_ADDR_H = 32'h4FFFFFFF;
     localparam MEMORY_BIT_CHECK = 4;
 
-    localparam BUS_ADDR_L = 32'h60000000;
-    localparam BUS_ADDR_H = 32'h6FFFFFFF;
+    localparam BUS_ADDR_L = 32'hF0000000;
+    localparam BUS_ADDR_H = 32'hFFFFFFFF;
     localparam BUS_BIT_CHECK = 4;
 
     //PC address on reset
@@ -183,15 +186,16 @@ package taiga_config;
 
     ////////////////////////////////////////////////////
     //Write-Back Unit IDs
-    localparam NUM_WB_UNITS = 2 + USE_MUL + USE_DIV;//ALU and LS
+    localparam NUM_WB_UNITS = 2 + USE_MUL + USE_DIV + USE_SP;//ALU and LS
     localparam NUM_UNITS = NUM_WB_UNITS + 2;//Branch and CSRs
 
     localparam ALU_UNIT_WB_ID = 0;
     localparam LS_UNIT_WB_ID = 1;
     localparam DIV_UNIT_WB_ID = LS_UNIT_WB_ID + USE_DIV;
     localparam MUL_UNIT_WB_ID = DIV_UNIT_WB_ID + USE_MUL;
+    localparam SP_UNIT_WB_ID = MUL_UNIT_WB_ID + USE_SP;
     //Non-writeback units
-    localparam BRANCH_UNIT_ID = MUL_UNIT_WB_ID + 1;
+    localparam BRANCH_UNIT_ID = SP_UNIT_WB_ID + 1;
     localparam GC_UNIT_ID = BRANCH_UNIT_ID + 1;
 
     ////////////////////////////////////////////////////
