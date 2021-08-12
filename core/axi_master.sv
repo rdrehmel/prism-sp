@@ -42,7 +42,13 @@ module axi_master
 
     //read constants
     assign m_axi.arlen = 0; // 1 request
-    assign m_axi.arburst = 0;// burst type does not matter
+	/* Burst type should not matter as ARLEN is set to zero.
+	 * However, make sure to use an ARBURST type of INCR (instead
+	 * of FIXED), because the Xilinx AXI Smartconnect (that is now
+	 * recommended over AXI Interconnect for most use-cases) returns
+	 * a DECERR on the B channel in the case of ARBURST=FIXED.
+	 */
+    assign m_axi.arburst = 2'b01;
     assign m_axi.rready = 1; //always ready to receive data
 
     always_ff @ (posedge clk) begin
@@ -58,7 +64,9 @@ module axi_master
 
     //write constants
     assign m_axi.awlen = 0;
-    assign m_axi.awburst = 0;
+	// Refer to the comment for ARBURST above that explains why
+	// we used AWBURST=INCR here.
+    assign m_axi.awburst = 2'b01;
     assign m_axi.bready = 1;
 
     set_clr_reg_with_rst #(.SET_OVER_CLR(0), .WIDTH(1), .RST_VALUE(1)) ready_m (
