@@ -25,26 +25,36 @@ import riscv_types::*;
 import taiga_types::*;
 
 module taiga (
-        input logic clk,
-        input logic rst,
+	input logic clk,
+	input logic rst,
 
-        local_memory_interface.master instruction_bram,
-        local_memory_interface.master data_bram,
+	local_memory_interface.master instruction_bram,
+	local_memory_interface.master data_bram,
 
-        axi_interface.master m_axi,
-        avalon_interface.master m_avalon,
-        wishbone_interface.master m_wishbone,
+	axi_interface.master m_axi_io,
+	avalon_interface.master m_avalon,
+	wishbone_interface.master m_wishbone,
 
-        output trace_outputs_t tr,
+	output trace_outputs_t tr,
 
-        l2_requester_interface.master l2,
+	l2_requester_interface.master l2,
 
-        input logic timer_interrupt,
-        input logic interrupt
-        );
+	input logic timer_interrupt,
+	input logic interrupt,
 
-    l1_arbiter_request_interface l1_request[L1_CONNECTIONS-1:0]();
-    l1_arbiter_return_interface l1_response[L1_CONNECTIONS-1:0]();
+	gem_interface.slave gem,
+	fifo_write_interface.monitor_out rx_meta_fifo_write_mon,
+	fifo_read_interface.monitor_out rx_meta_fifo_read_mon,
+
+	axi_write_address_channel.master m_axi_dma_aw,
+	axi_write_channel.master m_axi_dma_w,
+	axi_write_response_channel.master m_axi_dma_b,
+	axi_read_address_channel.master m_axi_dma_ar,
+	axi_read_channel.master m_axi_dma_r
+);
+
+    l1_arbiter_request_interface l1_request[L1_CONNECTIONS]();
+    l1_arbiter_return_interface l1_response[L1_CONNECTIONS]();
     logic sc_complete;
     logic sc_success;
 
@@ -67,6 +77,7 @@ module taiga (
     mul_inputs_t mul_inputs;
     div_inputs_t div_inputs;
     gc_inputs_t gc_inputs;
+	sp_inputs_t sp_inputs;
 
     unit_issue_interface unit_issue [NUM_UNITS]();
     logic alu_issued;
@@ -149,6 +160,19 @@ module taiga (
     id_t id_for_rd [COMMIT_PORTS];
 
     //Trace Interface Signals
+	logic tr_issue_gc_unit_new_request;
+	logic [NUM_UNITS-1:0] tr_unit_needed;
+	logic [NUM_UNITS-1:0] tr_unit_needed_issue_stage;
+	logic tr_unit_needed_gc_unit;
+	logic [4:0] tr_opcode_trim;
+	logic tr_issue_new_request;
+	logic tr_second_cycle_flush;
+	logic tr_processing_csr;
+	logic tr_next_state_in;
+	logic tr_potential_branch_exception;
+	logic tr_issue_stage_valid;
+	logic tr_gc_issue_hold;
+	logic tr_gc_fetch_flush;
     logic tr_operand_stall;
     logic tr_unit_stall;
     logic tr_no_id_stall;
@@ -193,6 +217,14 @@ module taiga (
             l1_arbiter arb(.*);
     endgenerate
 
+	generate if (USE_SP)
+		sp_unit sp_unit_block(.*,
+			.issue(unit_issue[SP_UNIT_WB_ID]),
+			.wb(unit_wb[SP_UNIT_WB_ID]),
+			.sp_inputs(sp_inputs)
+		);
+	endgenerate
+
     ////////////////////////////////////////////////////
     // ID support
     instruction_metadata_and_id_management id_block (.*);
@@ -224,7 +256,17 @@ module taiga (
     //Execution Units
     branch_unit branch_unit_block (.*, .issue(unit_issue[BRANCH_UNIT_ID]));
     alu_unit alu_unit_block (.*, .issue(unit_issue[ALU_UNIT_WB_ID]), .wb(unit_wb[ALU_UNIT_WB_ID]));
-    load_store_unit load_store_unit_block (.*, .dcache_on(1'b1), .clear_reservation(1'b0), .tlb(dtlb), .issue(unit_issue[LS_UNIT_WB_ID]), .wb(unit_wb[LS_UNIT_WB_ID]), .l1_request(l1_request[L1_DCACHE_ID]), .l1_response(l1_response[L1_DCACHE_ID]));
+    load_store_unit load_store_unit_block (
+		.*,
+		.m_axi(m_axi_io),
+		.dcache_on(1'b1),
+		.clear_reservation(1'b0),
+		.tlb(dtlb),
+		.issue(unit_issue[LS_UNIT_WB_ID]),
+		.wb(unit_wb[LS_UNIT_WB_ID]),
+		.l1_request(l1_request[L1_DCACHE_ID]),
+		.l1_response(l1_response[L1_DCACHE_ID])
+	);
     generate if (ENABLE_S_MODE) begin
             tlb_lut_ram #(DTLB_WAYS, DTLB_DEPTH) d_tlb (.*, .tlb(dtlb), .mmu(dmmu));
             mmu d_mmu (.*, .mmu(dmmu), .l1_request(l1_request[L1_DMMU_ID]), .l1_response(l1_response[L1_DMMU_ID]), .mmu_exception());
@@ -261,6 +303,19 @@ module taiga (
     //Trace Interface
     generate if (ENABLE_TRACE_INTERFACE) begin
         always_ff @(posedge clk) begin
+			tr.events.issue_gc_unit_new_request <= tr_issue_gc_unit_new_request;
+			tr.events.unit_needed <= tr_unit_needed;
+			tr.events.unit_needed_issue_stage <= tr_unit_needed_issue_stage;
+			tr.events.unit_needed_gc_unit <= tr_unit_needed_gc_unit;
+			tr.events.opcode_trim <= tr_opcode_trim;
+			tr.events.issue_new_request <= tr_issue_new_request;
+			tr.events.second_cycle_flush <= tr_second_cycle_flush;
+			tr.events.processing_csr <= tr_processing_csr;
+			tr.events.next_state_in <= tr_next_state_in;
+			tr.events.potential_branch_exception <= tr_potential_branch_exception;
+			tr.events.issue_stage_valid <= tr_issue_stage_valid;
+			tr.events.gc_issue_hold <= tr_gc_issue_hold;
+			tr.events.gc_fetch_flush <= tr_gc_fetch_flush;
             tr.events.operand_stall <= tr_operand_stall;
             tr.events.unit_stall <= tr_unit_stall;
             tr.events.no_id_stall <= tr_no_id_stall;
