@@ -84,6 +84,7 @@ package taiga_types;
     typedef struct packed{
         logic [31:0] pc;
         logic [31:0] instruction;
+        logic [6:0] fn7;
         logic [2:0] fn3;
         logic [6:0] opcode;
 
@@ -199,7 +200,7 @@ package taiga_types;
         logic [31:2] addr;
         logic [31:0] data;
         logic rnw;
-        logic [0:3] be;
+        logic [3:0] be;
         logic [2:0] size;
         logic con;
     } to_l1_arbiter_packet;
@@ -221,6 +222,19 @@ package taiga_types;
     } fifo_type_t;
 
     typedef struct packed {
+		logic issue_gc_unit_new_request;
+		logic [NUM_UNITS-1:0] unit_needed;
+		logic [NUM_UNITS-1:0] unit_needed_issue_stage;
+		logic unit_needed_gc_unit;
+		logic [4:0] opcode_trim;
+		logic issue_new_request;
+		logic second_cycle_flush;
+		logic processing_csr;
+		logic next_state_in;
+		logic potential_branch_exception;
+		logic issue_stage_valid;
+		logic gc_issue_hold;
+		logic gc_fetch_flush;
         //Decode
         logic operand_stall;
         logic unit_stall;
@@ -264,5 +278,11 @@ package taiga_types;
         logic [31:0] instruction_data_dec;
         taiga_trace_events_t events;
     } trace_outputs_t;
+
+	typedef struct packed {
+		logic [6:0] fn7;
+		logic [31:0] rs1;
+		logic [31:0] rs2;
+	} sp_inputs_t;
 
 endpackage
