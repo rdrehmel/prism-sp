@@ -90,6 +90,8 @@ module  illegal_instruction_checker
     localparam [31:0] DIVU = 32'b0000001??????????101?????0110011;
     localparam [31:0] REM = 32'b0000001??????????110?????0110011;
     localparam [31:0] REMU = 32'b0000001??????????111?????0110011;
+	//Custom
+	localparam [31:0] CUSTOM0 = 32'b????????_????????_????????_?0001011;
 
     //AMO
     localparam [31:0] AMO_ADD = 32'b00000????????????010?????0101111;
@@ -116,6 +118,7 @@ module  illegal_instruction_checker
     logic amo_legal;
     logic machine_legal;
     logic supervisor_legal;
+	logic custom_legal;
     ////////////////////////////////////////////////////
     //Implementation
 
@@ -149,13 +152,18 @@ module  illegal_instruction_checker
         SRET, SFENCE_VMA, WFI
     };
 
+	assign custom_legal = instruction inside {
+		CUSTOM0
+	};
+
     assign illegal_instruction = ~(
         base_legal |
         (USE_MUL & mul_legal) |
         (USE_DIV & div_legal) |
         (USE_AMO & amo_legal) |
         (ENABLE_M_MODE & machine_legal) |
-        (ENABLE_S_MODE & supervisor_legal)
+        (ENABLE_S_MODE & supervisor_legal) |
+		(USE_SP & custom_legal)
     );
 
 endmodule
