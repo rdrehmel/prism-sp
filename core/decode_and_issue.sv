@@ -41,8 +41,9 @@ module decode_and_issue (
         output gc_inputs_t gc_inputs,
         output mul_inputs_t mul_inputs,
         output div_inputs_t div_inputs,
+		output sp_inputs_t sp_inputs,
 
-        unit_issue_interface.decode unit_issue [NUM_UNITS-1:0],
+        unit_issue_interface.decode unit_issue [NUM_UNITS],
         input logic potential_branch_exception,
         output logic alu_issued,
 
@@ -61,6 +62,14 @@ module decode_and_issue (
         output logic illegal_instruction,
 
         //Trace signals
+        output logic tr_issue_gc_unit_new_request,
+		output logic [NUM_UNITS-1:0] tr_unit_needed,
+		output logic [NUM_UNITS-1:0] tr_unit_needed_issue_stage,
+		output logic tr_unit_needed_gc_unit,
+		output logic [4:0] tr_opcode_trim,
+		output logic tr_issue_stage_valid,
+		output logic tr_gc_issue_hold,
+		output logic tr_gc_fetch_flush,
         output logic tr_operand_stall,
         output logic tr_unit_stall,
         output logic tr_no_id_stall,
@@ -85,6 +94,7 @@ module decode_and_issue (
         );
 
     logic [2:0] fn3;
+    logic [6:0] fn7;
     logic [6:0] opcode;
     logic [4:0] opcode_trim;
 
@@ -134,6 +144,7 @@ module decode_and_issue (
     assign opcode = decode.instruction[6:0];
     assign opcode_trim = opcode[6:2];
     assign fn3 = decode.instruction[14:12];
+	assign fn7 = decode.instruction[31:25];
     assign rs1_addr = decode.instruction[19:15];
     assign rs2_addr = decode.instruction[24:20];
     assign rd_addr = decode.instruction[11:7];
@@ -144,7 +155,7 @@ module decode_and_issue (
     ////////////////////////////////////////////////////
     //Register File Support
     assign uses_rs1 = !(opcode_trim inside {LUI_T, AUIPC_T, JAL_T, FENCE_T} || csr_imm_op || environment_op);
-    assign uses_rs2 = opcode_trim inside {BRANCH_T, STORE_T, ARITH_T, AMO_T};
+    assign uses_rs2 = opcode_trim inside {BRANCH_T, STORE_T, ARITH_T, AMO_T, CUSTOM0_T};
     assign uses_rd = !(opcode_trim inside {BRANCH_T, STORE_T, FENCE_T} || environment_op);
 
     always_ff @(posedge clk) begin
@@ -160,6 +171,7 @@ module decode_and_issue (
             issue.instruction <= decode.instruction;
             issue.addr_valid <= decode.addr_valid;
             issue.fn3 <= fn3;
+            issue.fn7 <= fn7;
             issue.opcode <= opcode;
             issue.rs_addr[RS1] <= rs1_addr;
             issue.rs_addr[RS2] <= rs2_addr;
@@ -185,6 +197,13 @@ module decode_and_issue (
 
     generate if (USE_DIV)
         assign unit_needed[DIV_UNIT_WB_ID] = mult_div_op && fn3[2];
+    endgenerate
+
+    generate if (USE_SP)
+        assign unit_needed[SP_UNIT_WB_ID] = opcode_trim == CUSTOM0_T;
+		assign sp_inputs.fn7 = issue.fn7;
+		assign sp_inputs.rs1 = rs_data[RS1];
+		assign sp_inputs.rs2 = rs_data[RS2];
     endgenerate
 
     always_ff @(posedge clk) begin
@@ -570,9 +589,17 @@ module decode_and_issue (
             end
         end
 
+        assign tr_issue_gc_unit_new_request = unit_issue[GC_UNIT_ID].new_request;
+    	assign tr_issue_stage_valid = issue.stage_valid;
+		assign tr_gc_issue_hold = gc_issue_hold;
+		assign tr_gc_fetch_flush = gc_fetch_flush;
         assign tr_instruction_issued_dec = instruction_issued;
         assign tr_instruction_pc_dec = issue.pc;
         assign tr_instruction_data_dec = issue.instruction;
+        assign tr_opcode_trim = opcode_trim;
+        assign tr_unit_needed_gc_unit = unit_needed[GC_UNIT_ID];
+		assign tr_unit_needed = unit_needed;
+		assign tr_unit_needed_issue_stage = unit_needed_issue_stage;
     end endgenerate
 
 endmodule
