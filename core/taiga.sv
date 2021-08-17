@@ -43,6 +43,7 @@ module taiga (
 	input logic interrupt,
 
 	gem_interface.slave gem,
+	output logic gem_irq,
 	fifo_write_interface.monitor_out rx_meta_fifo_write_mon,
 	fifo_read_interface.monitor_out rx_meta_fifo_read_mon,
 

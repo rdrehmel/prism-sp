@@ -27,6 +27,8 @@ module prism_sp_wrapper #(
 	input wire clock,
 	input wire reset,
 
+	output wire gem_irq,
+
 		// Instruction BRAM
 	output wire [31:0] ibram_addrb,
 	output wire ibram_clkb,
