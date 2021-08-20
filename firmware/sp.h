@@ -17,7 +17,8 @@
 #define _SP_H_
 
 /*
- * This file defines the API for the DMA stuff
+ * These identifiers are found in the funct7 field of the instruction.
+ * The SP unit decodes them to find out which instruction to execute.
  */
 #define SP_FUNCT7_RX_META_NELEMS		"0x0"
 #define SP_FUNCT7_RX_META_POP			"0x1"
@@ -35,30 +36,21 @@
 #define SP_FUNCT7_STORE_REG				"0x11"
 #define SP_FUNCT7_PULSE					"0x1f"
 
-// A custom instruction without arguments
+/*
+ * A custom instruction with
+ * 0 arguments
+ * 0 return value
+ */
 #define EMIT_INSN_000(funct7) \
 	__asm__ __volatile__( \
 		".insn r CUSTOM_0, 0, " funct7 ", x0, x0, x0\n" \
 	: : )
 
-// A custom instruction
-// 0 arguments
-// 1 return value
-#define EMIT_INSN_100(funct7, rd) \
-	__asm__ __volatile__( \
-		".insn r CUSTOM_0, 0, " funct7 ", %[_rd], x0, x0\n" \
-		: [_rd] "=r" (rd) \
-		: \
-	)
-
-// A custom instruction with two arguments
-#define EMIT_INSN_011(funct7, rs1, rs2) \
-	__asm__ __volatile__( \
-		".insn r CUSTOM_0, 0, " funct7 ", x0, %[_rs1], %[_rs2]\n" \
-	: \
-	: [_rs1] "r" (rs1), [_rs2] "r" (rs2) \
-	)
-
+/*
+ * A custom instruction with
+ * 1 argument
+ * 0 return value
+ */
 #define EMIT_INSN_010(funct7, rs1) \
 	__asm__ __volatile__( \
 		".insn r CUSTOM_0, 0, " funct7 ", x0, %[_rs1], x0\n" \
@@ -66,7 +58,35 @@
 	: [_rs1] "r" (rs1) \
 	)
 
-// A custom instruction with one argument and a return value
+/*
+ * A custom instruction with
+ * 2 arguments
+ * 0 return value
+ */
+#define EMIT_INSN_011(funct7, rs1, rs2) \
+	__asm__ __volatile__( \
+		".insn r CUSTOM_0, 0, " funct7 ", x0, %[_rs1], %[_rs2]\n" \
+	: \
+	: [_rs1] "r" (rs1), [_rs2] "r" (rs2) \
+	)
+
+/*
+ * A custom instruction with
+ * 0 arguments
+ * 1 return value
+ */
+#define EMIT_INSN_100(funct7, rd) \
+	__asm__ __volatile__( \
+		".insn r CUSTOM_0, 0, " funct7 ", %[_rd], x0, x0\n" \
+		: [_rd] "=r" (rd) \
+		: \
+	)
+
+/*
+ * A custom instruction with
+ * 1 argument
+ * 1 return value
+ */
 #define EMIT_INSN_110(funct7, rd, rs1) \
 	__asm__ __volatile__( \
 		".insn r CUSTOM_0, 0, " funct7 ", %[_rd], %[_rs1], x0\n" \
@@ -74,7 +94,11 @@
 	: [_rs1] "r" (rs1) \
 	)
 
-// A custom instruction with two arguments and a return value
+/*
+ * A custom instruction with
+ * 2 argument
+ * 1 return value
+ */
 #define EMIT_INSN_111(funct7, rd, rs1, rs2) \
 	__asm__ __volatile__( \
 		".insn r CUSTOM_0, 0, " funct7 ", %[_rd], %[_rs1], %[_rs2]\n" \
@@ -83,7 +107,7 @@
 	)
 
 /*
- * This function loads a word from the meta FIFO of channel nchan.
+ * This function gives the number of elements in the RX meta FIFO.
  */
 static inline uint32_t
 sp_rx_meta_nelems()
@@ -94,6 +118,9 @@ sp_rx_meta_nelems()
 	return x;
 }
 
+/*
+ * This function pops a word from the RX meta FIFO.
+ */
 static inline uint32_t
 sp_rx_meta_pop_uint32()
 {
@@ -109,6 +136,10 @@ sp_rx_data_skip(uint32_t length)
 	EMIT_INSN_010(SP_FUNCT7_RX_DATA_SKIP, length);
 }
 
+/*
+ * This function starts the RX DMA transfer
+ * (from RX data FIFO to AXI memory).
+ */
 static inline void
 sp_rx_data_dma_start(uint32_t addr, uint32_t length)
 {
@@ -138,6 +169,10 @@ sp_tx_meta_push_uint32(uint32_t x)
 	EMIT_INSN_010(SP_FUNCT7_TX_META_PUSH, x);
 }
 
+/*
+ * This function starts the TX DMA transfer
+ * (from AXI memory to TX data FIFO).
+ */
 static inline void
 sp_tx_data_dma_start(uint32_t addr, uint32_t length)
 {
