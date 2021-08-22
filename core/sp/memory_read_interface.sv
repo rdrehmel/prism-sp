@@ -36,6 +36,7 @@ modport master (
 	output addr,
 	output len,
 	output start,
+	input busy,
 	input done,
 	input error
 );
@@ -43,6 +44,7 @@ modport slave (
 	input addr,
 	input len,
 	input start,
+	output busy,
 	output done,
 	output error
 );
