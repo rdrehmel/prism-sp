@@ -24,14 +24,14 @@ logic full;
 logic almost_full;
 
 modport master(
-	input wr_data,
+	output wr_data,
 	output wr_en,
 	input full,
 	input almost_full
 );
 
 modport slave(
-	output wr_data,
+	input wr_data,
 	input wr_en,
 	output full,
 	output almost_full
