@@ -36,6 +36,9 @@ module fifo_to_axi
 	axi_write_response_channel.master axi_b
 );
 
+localparam integer MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
+localparam integer LEN_WIDTH = 16;
+
 assign axi_aw.awid = '0;
 // Size should be AXI_DATA_WIDTH, in 2^AWSIZE bytes, otherwise narrow bursts are
 // used
@@ -54,9 +57,6 @@ assign axi_aw.awuser = 1;
 // XXX Only full AXI_DATA_WIDTH writes are currently supported.
 assign axi_w.wstrb = {(AXI_DATA_WIDTH/8){1'b1}};
 assign axi_w.wuser = 0;
-
-localparam integer MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
-localparam integer LEN_WIDTH = 16;
 
 // ------- ------- ------- ------- ------- ------- ------- -------
 //
