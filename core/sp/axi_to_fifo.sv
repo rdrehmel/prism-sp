@@ -24,14 +24,17 @@ module axi_to_fifo #
 	input wire reset_n,
 
 	// Interface to start the memory reading process
-	memory_read mem_r,
+	memory_read_interface.slave mem_r,
 	// Interface to write to a FIFO
-	fifo_store.master fifo_s,
+	fifo_write_interface.master fifo_w,
 
 	// Actual AXI memory interface for reading
 	axi_read_address_channel.master axi_ar,
 	axi_read_channel.master axi_r
 );
+
+localparam integer MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
+localparam integer LEN_WIDTH = 16;
 
 //
 // Set up the FIFO Write interface
@@ -39,9 +42,6 @@ module axi_to_fifo #
 wire logic ar_hshake = axi_ar.arvalid && axi_ar.arready;
 wire logic r_hshake = axi_r.rvalid && axi_r.rready;
 wire logic r_hshake_last = r_hshake && axi_r.rlast;
-assign fifo_s.store = r_hshake;
-assign fifo_s.data = axi_r.rdata;
-assign fifo_s.last = axi_r.rlast;
 
 //
 // Set up the AXI Read Channel interface
@@ -50,7 +50,8 @@ assign fifo_s.last = axi_r.rlast;
 assign axi_ar.arid = '0;
 // ARSIZE(exponent to 2^n bytes) is derived from AXI_DATA_WIDTH
 // axi_ar.arsize is in bytes.
-assign axi_ar.arsize = $clog2((AXI_DATA_WIDTH/8)-1);
+localparam int ARSIZE = $clog2((AXI_DATA_WIDTH/8)-1);
+assign axi_ar.arsize = ARSIZE[2:0];
 // INCR burst type
 assign axi_ar.arburst = 2'b01;
 assign axi_ar.arlock = 1'b0;
@@ -165,6 +166,21 @@ always_ff @(posedge clock) begin
 
 		if (r_hshake_last) begin
 			read_burst_done <= 1'b1;
+		end
+	end
+end
+
+always_ff @(posedge clock) begin
+	if (!reset_n) begin
+		fifo_w.wr_en <= 1'b0;
+	end
+	else begin
+		// Unpulse
+		fifo_w.wr_en <= 1'b0;
+
+		if (r_hshake) begin
+			fifo_w.wr_en <= 1'b1;
+			fifo_w.wr_data <= axi_r.rdata;
 		end
 	end
 end
