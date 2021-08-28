@@ -220,13 +220,60 @@ interface writeback_store_interface;
         );
 endinterface
 
-interface ls_sub_unit_interface #(parameter BASE_ADDR = 32'h00000000, parameter UPPER_BOUND = 32'hFFFFFFFF, parameter BIT_CHECK = 4);
+interface ls_sub_unit_interface #(
+	parameter int N = 1,
+	parameter bit REVERSE = 0,
+/*
+ * Verilator currently does not support two constructs needed here.
+ *
+ * For one, it does not respect the 'i' in the for loop as constant (Vivado does).
+ * Secondly, parameter arrays are not fully supported, see
+ * https://github.com/verilator/verilator/issues/2907
+ */
+`ifndef VERILATOR
+	parameter int BASE_ADDR[N],
+	parameter int UPPER_BOUND[N],
+	parameter int BIT_CHECK[N]
+`else
+	parameter int BASE_ADDR_0 = 32'h00000000,
+	parameter int UPPER_BOUND_0 = 32'hFFFFFFFF,
+	parameter int BIT_CHECK_0 = 1,
+	parameter int BASE_ADDR_1 = 32'h00000000,
+	parameter int UPPER_BOUND_1 = 32'hFFFFFFFF,
+	parameter int BIT_CHECK_1 = 1
+`endif
+);
     logic data_valid;
     logic ready;
     logic new_request;
 
-    function  address_range_check (input logic[31:0] addr);
-        return (addr[31:32-BIT_CHECK] == BASE_ADDR[31:32-BIT_CHECK]);
+    function address_range_check (input logic[31:0] addr);
+`ifndef VERILATOR
+		logic [N-1:0] x;
+		for (int i = 0; i < N; i = i + 1) begin
+			x[i] = addr[31:32-BIT_CHECK[i]] == BASE_ADDR[i][31:32-BIT_CHECK[i]];
+		end
+		if (REVERSE)
+			return ~|x;
+		else
+			return |x;
+`else
+		logic x;
+		if (N == 1) begin
+			x = addr[31:32-BIT_CHECK_0] == BASE_ADDR_0[31:32-BIT_CHECK_0];
+		end
+		else if (N == 2) begin
+			x = addr[31:32-BIT_CHECK_0] == BASE_ADDR_0[31:32-BIT_CHECK_0] |
+				addr[31:32-BIT_CHECK_1] == BASE_ADDR_1[31:32-BIT_CHECK_1];
+		end
+		if (N >= 3) begin
+			$error("N > 2 currently not supported for Verilator.");
+		end
+		if (REVERSE)
+			return ~x;
+		else
+			return x;
+`endif
     endfunction
 
     modport sub_unit (input new_request, output data_valid, ready);

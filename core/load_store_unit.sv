@@ -78,9 +78,47 @@ module load_store_unit (
     localparam ATTRIBUTES_DEPTH = USE_DCACHE ? 2 : 1;
 
     data_access_shared_inputs_t shared_inputs;
-    ls_sub_unit_interface #(.BASE_ADDR(SCRATCH_ADDR_L), .UPPER_BOUND(SCRATCH_ADDR_H), .BIT_CHECK(SCRATCH_BIT_CHECK)) bram();
-    ls_sub_unit_interface #(.BASE_ADDR(BUS_ADDR_L), .UPPER_BOUND(BUS_ADDR_H), .BIT_CHECK(BUS_BIT_CHECK)) bus();
-    ls_sub_unit_interface #(.BASE_ADDR(MEMORY_ADDR_L), .UPPER_BOUND(MEMORY_ADDR_H), .BIT_CHECK(MEMORY_BIT_CHECK)) cache();
+	/* See the comment in interfaces.sv for information on
+	 * why Verilator needs special handling here.
+	 */
+    ls_sub_unit_interface #(
+`ifndef VERILATOR
+		.BASE_ADDR('{SCRATCH_ADDR_L}),
+		.UPPER_BOUND('{SCRATCH_ADDR_H}),
+		.BIT_CHECK('{SCRATCH_BIT_CHECK})
+`else
+		.BASE_ADDR_0(SCRATCH_ADDR_L),
+		.UPPER_BOUND_0(SCRATCH_ADDR_H),
+		.BIT_CHECK_0(SCRATCH_BIT_CHECK)
+`endif
+	) bram();
+    ls_sub_unit_interface #(
+		.N(1),
+		.REVERSE(1),
+`ifndef VERILATOR
+		//.BASE_ADDR('{BUS0_ADDR_L,BUS1_ADDR_L}),
+		//.UPPER_BOUND('{BUS0_ADDR_H,BUS1_ADDR_H}),
+		//.BIT_CHECK('{BUS0_BIT_CHECK,BUS1_BIT_CHECK})
+		.BASE_ADDR('{BUS0_ADDR_L}),
+		.UPPER_BOUND('{BUS0_ADDR_H}),
+		.BIT_CHECK('{BUS0_BIT_CHECK})
+`else
+		.BASE_ADDR_0(SCRATCH_ADDR_L),
+		.UPPER_BOUND_0(SCRATCH_ADDR_H),
+		.BIT_CHECK_0(SCRATCH_BIT_CHECK)
+`endif
+	) bus();
+    ls_sub_unit_interface #(
+`ifndef VERILATOR
+		.BASE_ADDR('{MEMORY_ADDR_L}),
+		.UPPER_BOUND('{MEMORY_ADDR_H}),
+		.BIT_CHECK('{MEMORY_BIT_CHECK})
+`else
+		.BASE_ADDR_0(MEMORY_ADDR_L),
+		.UPPER_BOUND_0(MEMORY_ADDR_H),
+		.BIT_CHECK_0(MEMORY_BIT_CHECK)
+`endif
+	) cache();
 
     logic units_ready;
     logic unit_switch_stall;
