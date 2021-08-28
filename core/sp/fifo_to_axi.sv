@@ -73,9 +73,6 @@ wire logic b_hshake = axi_b.bvalid && axi_b.bready;
 
 assign fifo_r.rd_en = write_burst_start || w_hshake_not_last;
 
-//
-// -> AWVALID
-//
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_aw.awvalid <= 1'b0;
@@ -83,6 +80,19 @@ always_ff @(posedge clock) begin
 	else begin
 		if (write_burst_start) begin
 			axi_aw.awvalid <= 1'b1;
+			axi_aw.awaddr <= dest_addr;
+
+			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
+				axi_aw.awlen <= 255;
+			end
+			else begin
+				// See the comment in axi_to_fifo.sv for an explanation.
+				localparam int ALIGN = $clog2(AXI_DATA_WIDTH / 8);
+				if (bytes_left[ALIGN-1:0] != '0)
+					axi_aw.awlen <= bytes_left[ALIGN +:8];
+				else
+					axi_aw.awlen <= bytes_left[ALIGN +:8] - 1;
+			end
 		end
 		else if (aw_hshake) begin
 			// The address was successfully submitted.
@@ -92,37 +102,11 @@ always_ff @(posedge clock) begin
 	end
 end
 
-//
-// -> AWADDR, etc
-// All signals that depend on AWVALID are registered.
-//
-always_ff @(posedge clock) begin
-	if (!reset_n) begin
-	end
-	else begin
-		if (write_burst_start) begin
-			axi_aw.awaddr <= dest_addr;
-
-			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
-				axi_aw.awlen <= 255;
-			end
-			else begin
-				localparam int ALIGN = $clog2((AXI_DATA_WIDTH / 8) - 1);
-				axi_aw.awlen <= bytes_left[ALIGN +:8] - 1;
-			end
-		end
-	end
-end
-
-
 // ------- ------- ------- ------- ------- ------- ------- -------
 //
 // AXI SECTION A2.3: Write Data Channel
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
-//
-// -> WVALID
-//
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_w.wvalid <= 1'b0;
@@ -130,9 +114,13 @@ always_ff @(posedge clock) begin
 	else begin
 		if (write_burst_start) begin
 			axi_w.wvalid <= 1'b1;
+			axi_w.wdata <= fifo_r.rd_data;
+			axi_w.wlast <= bytes_left == '0;
 		end
 		else if (w_hshake_not_last) begin
 			axi_w.wvalid <= 1'b1;
+			axi_w.wdata <= fifo_r.rd_data;
+			axi_w.wlast <= w_hshake_count_comb == axi_aw.awlen;
 		end
 		else if (w_hshake_last) begin
 			axi_w.wvalid <= 1'b0;
@@ -140,39 +128,17 @@ always_ff @(posedge clock) begin
 	end
 end
 
-//
-// -> WDATA
-//
-always_ff @(posedge clock) begin
-	if (write_burst_start) begin
-		axi_w.wdata <= fifo_r.rd_data;
-	end
-	if (w_hshake_not_last) begin
-		axi_w.wdata <= fifo_r.rd_data;
-	end
-end
-
-//
-// -> WLAST
-//
-always_ff @(posedge clock) begin
-	axi_w.wlast <= w_hshake_count_comb == { 1'b0, axi_aw.awlen };
-end
-
 // ------- ------- ------- ------- ------- ------- ------- -------
 //
 // AXI SECTION A2.4: Write Response (B) Channel
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
-//
-// -> BREADY
-//
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_b.bready <= 1'b0;
 	end
 	else begin
-		if (write_burst_start) begin
+		if (w_hshake_last) begin
 			axi_b.bready <= 1'b1;
 		end
 		else if (b_hshake) begin
@@ -188,8 +154,8 @@ end
 // ------- ------- ------- ------- ------- ------- ------- -------
 // `w_hshake_count` increments once for each successful (=handshake)
 // write transaction during a burst.
-var logic [8:0] w_hshake_count_comb;
-var logic [8:0] w_hshake_count_ff;
+var logic [7:0] w_hshake_count_comb;
+var logic [7:0] w_hshake_count_ff;
 
 always_comb begin
 	w_hshake_count_comb = w_hshake_count_ff;
@@ -201,7 +167,7 @@ always_comb begin
 		if (write_burst_start) begin
 			w_hshake_count_comb = '0;
 		end
-		else if (w_hshake) begin
+		if (w_hshake) begin
 			w_hshake_count_comb = w_hshake_count_ff + 1;
 		end
 	end
@@ -220,7 +186,7 @@ always_ff @(posedge clock) begin
 		// unpulse
 		write_burst_done <= 1'b0;
 
-		if (b_hshake && w_hshake_count_ff == axi_aw.awlen + 1) begin
+		if (b_hshake) begin
 			write_burst_done <= 1'b1;
 		end
 	end
