@@ -72,9 +72,6 @@ assign axi_ar.aruser = '1;
 // When master is ready to accept data, master asserts RREADY
 // On the next clock posedge where both RVALID(S) and RREADY(M)
 // are asserted, the data in RDATA is transferred.
-
-//
-// -> ARVALID
 //
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
@@ -83,6 +80,35 @@ always_ff @(posedge clock) begin
 	else begin
 		if (read_burst_start) begin
 			axi_ar.arvalid <= 1'b1;
+			axi_ar.araddr <= src_addr;
+
+			// 16       8       0
+			//  |-------|-------|
+			//   ...YYYXXXXXXXXAA
+			//      YYY is the number of full bursts
+			// XXXXXXXX is the number of beats
+			//       AA is the number of alignment bits (for a 32-bit
+			//          data width)
+			// So this "if" condition below is just whether a Y bit is
+			// set.
+			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
+				axi_ar.arlen <= 255;
+			end
+			else begin
+				// If it isn't, round up if necessary (effectively adding
+				// 1 to XXXXXXXX and then subtracting 1).
+				// Otherwise, just subtract 1. There is no need to
+				// use bytes_left[ALIGN +:9] in this case, because
+				// that would only be necessary if there are bits set
+				// in bytes_left above bit (8+ALIGN-1) which cannot
+				// happen because these are the YYY bits so we would not
+				// end up here in the first place.
+				localparam int ALIGN = $clog2(AXI_DATA_WIDTH / 8);
+				if (bytes_left[ALIGN-1:0] != '0)
+					axi_ar.arlen <= bytes_left[ALIGN +:8];
+				else
+					axi_ar.arlen <= bytes_left[ALIGN +:8] - 1;
+			end
 		end
 		else if (ar_hshake) begin
 			axi_ar.arvalid <= 1'b0;
@@ -90,38 +116,12 @@ always_ff @(posedge clock) begin
 	end
 end
 
-//
-// -> ARADDR, ARLEN, etc
-// Everything depending on ARVALID.
-//
-always_ff @(posedge clock) begin
-	if (!reset_n) begin
-	end
-	else begin
-		if (read_burst_start) begin
-			axi_ar.araddr <= src_addr;
-
-			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
-				axi_ar.arlen <= 255;
-			end
-			else begin
-				localparam int ALIGN = $clog2((AXI_DATA_WIDTH / 8) - 1);
-				axi_ar.arlen <= bytes_left[ALIGN +:8] - 1;
-			end
-		end
-	end
-end
-
-
 // ------- ------- ------- ------- ------- ------- ------- -------
 //
 // AXI SECTION A2.6: Read Data (and Response) Channel
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
 
-//
-// -> RREADY
-//
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_r.rready <= 1'b0;
@@ -141,19 +141,6 @@ end
 // Read operation FSM helpers
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
-
-var integer r_hshake_count;
-always_ff @(posedge clock) begin
-	if (!reset_n) begin
-		r_hshake_count <= '0;
-	end
-	else begin
-		if (read_burst_start)
-			r_hshake_count <= '0;
-		else if (r_hshake)
-			r_hshake_count <= r_hshake_count + 1;
-	end
-end
 
 var logic read_burst_done;
 always_ff @(posedge clock) begin
