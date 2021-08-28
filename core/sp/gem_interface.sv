@@ -15,6 +15,7 @@
  */
 interface gem_interface;
 	logic tx_clock;
+	logic tx_resetn;
 	logic tx_r_data_rdy;
 	logic tx_r_rd;
 	logic tx_r_valid;
@@ -32,6 +33,7 @@ interface gem_interface;
 	logic dma_tx_status_tog;
 
 	logic rx_clock;
+	logic rx_resetn;
 	logic rx_w_wr;
 	logic [31:0] rx_w_data;
 	logic rx_w_sop;
@@ -43,6 +45,7 @@ interface gem_interface;
 
 	modport slave(
 		input tx_clock,
+		input tx_resetn,
 		output tx_r_data_rdy,
 		input tx_r_rd,
 		output tx_r_valid,
@@ -58,6 +61,7 @@ interface gem_interface;
 		input dma_tx_end_tog,
 		output dma_tx_status_tog,
 		input rx_clock,
+		input rx_resetn,
 		input rx_w_wr,
 		input rx_w_data,
 		input rx_w_sop,
