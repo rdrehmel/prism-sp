@@ -36,8 +36,9 @@ module fifo_to_axi
 	axi_write_response_channel.master axi_b
 );
 
-localparam integer MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
-localparam integer LEN_WIDTH = 16;
+localparam int MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
+localparam int LEN_WIDTH = 16;
+localparam int ALIGN_WIDTH = $clog2(AXI_DATA_WIDTH / 8);
 
 assign axi_aw.awid = '0;
 // Size should be AXI_DATA_WIDTH, in 2^AWSIZE bytes, otherwise narrow bursts are
@@ -54,8 +55,6 @@ assign axi_aw.awcache = 4'b0010;
 assign axi_aw.awprot = 3'h0;
 assign axi_aw.awqos = 4'h0;
 assign axi_aw.awuser = 1;
-// XXX Only full AXI_DATA_WIDTH writes are currently supported.
-assign axi_w.wstrb = {(AXI_DATA_WIDTH/8){1'b1}};
 assign axi_w.wuser = 0;
 
 // ------- ------- ------- ------- ------- ------- ------- -------
@@ -73,6 +72,20 @@ wire logic b_hshake = axi_b.bvalid && axi_b.bready;
 
 assign fifo_r.rd_en = write_burst_start || w_hshake_not_last;
 
+var logic [7:0] axi_aw_awlen_comb;
+always_comb begin
+	if (full_bursts_left != '0) begin
+		axi_aw_awlen_comb = 255;
+	end
+	else begin
+		// See the comment in axi_to_fifo.sv for an explanation.
+		if (extra_bytes != '0)
+			axi_aw_awlen_comb = beats_left;
+		else
+			axi_aw_awlen_comb = beats_left - 1;
+	end
+end
+
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_aw.awvalid <= 1'b0;
@@ -81,18 +94,7 @@ always_ff @(posedge clock) begin
 		if (write_burst_start) begin
 			axi_aw.awvalid <= 1'b1;
 			axi_aw.awaddr <= dest_addr;
-
-			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
-				axi_aw.awlen <= 255;
-			end
-			else begin
-				// See the comment in axi_to_fifo.sv for an explanation.
-				localparam int ALIGN = $clog2(AXI_DATA_WIDTH / 8);
-				if (bytes_left[ALIGN-1:0] != '0)
-					axi_aw.awlen <= bytes_left[ALIGN +:8];
-				else
-					axi_aw.awlen <= bytes_left[ALIGN +:8] - 1;
-			end
+			axi_aw.awlen <= axi_aw_awlen_comb;
 		end
 		else if (aw_hshake) begin
 			// The address was successfully submitted.
@@ -107,6 +109,50 @@ end
 // AXI SECTION A2.3: Write Data Channel
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
+var logic [(AXI_DATA_WIDTH/8)-1:0] axi_w_wstrb_comb;
+always_comb begin
+if (AXI_DATA_WIDTH == 32) begin
+	case (extra_bytes)
+	2'b00: axi_w_wstrb_comb = 4'b1111;
+	2'b01: axi_w_wstrb_comb = 4'b0001;
+	2'b10: axi_w_wstrb_comb = 4'b0011;
+	2'b11: axi_w_wstrb_comb = 4'b0111;
+	endcase
+end
+else if (AXI_DATA_WIDTH == 64) begin
+	case (extra_bytes)
+	3'b000: axi_w_wstrb_comb = 8'b11111111;
+	3'b001: axi_w_wstrb_comb = 8'b00000001;
+	3'b010: axi_w_wstrb_comb = 8'b00000011;
+	3'b011: axi_w_wstrb_comb = 8'b00000111;
+	3'b100: axi_w_wstrb_comb = 8'b00001111;
+	3'b101: axi_w_wstrb_comb = 8'b00011111;
+	3'b110: axi_w_wstrb_comb = 8'b00111111;
+	3'b111: axi_w_wstrb_comb = 8'b01111111;
+	endcase
+end
+else if (AXI_DATA_WIDTH == 128) begin
+	case (extra_bytes)
+	4'b0000: axi_w_wstrb_comb = 16'b1111111111111111;
+	4'b0001: axi_w_wstrb_comb = 16'b0000000000000001;
+	4'b0010: axi_w_wstrb_comb = 16'b0000000000000011;
+	4'b0011: axi_w_wstrb_comb = 16'b0000000000000111;
+	4'b0100: axi_w_wstrb_comb = 16'b0000000000001111;
+	4'b0101: axi_w_wstrb_comb = 16'b0000000000011111;
+	4'b0110: axi_w_wstrb_comb = 16'b0000000000111111;
+	4'b0111: axi_w_wstrb_comb = 16'b0000000001111111;
+	4'b1000: axi_w_wstrb_comb = 16'b0000000011111111;
+	4'b1001: axi_w_wstrb_comb = 16'b0000000111111111;
+	4'b1010: axi_w_wstrb_comb = 16'b0000001111111111;
+	4'b1011: axi_w_wstrb_comb = 16'b0000011111111111;
+	4'b1100: axi_w_wstrb_comb = 16'b0000111111111111;
+	4'b1101: axi_w_wstrb_comb = 16'b0001111111111111;
+	4'b1110: axi_w_wstrb_comb = 16'b0011111111111111;
+	4'b1111: axi_w_wstrb_comb = 16'b0111111111111111;
+	endcase
+end
+end
+
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		axi_w.wvalid <= 1'b0;
@@ -115,12 +161,26 @@ always_ff @(posedge clock) begin
 		if (write_burst_start) begin
 			axi_w.wvalid <= 1'b1;
 			axi_w.wdata <= fifo_r.rd_data;
-			axi_w.wlast <= bytes_left == '0;
+			if (axi_aw_awlen_comb == '0) begin
+				axi_w.wlast <= 1'b1;
+				axi_w.wstrb <= axi_w_wstrb_comb;
+			end
+			else begin
+				axi_w.wlast <= 1'b0;
+				axi_w.wstrb <= '1;
+			end
 		end
 		else if (w_hshake_not_last) begin
 			axi_w.wvalid <= 1'b1;
 			axi_w.wdata <= fifo_r.rd_data;
-			axi_w.wlast <= w_hshake_count_comb == axi_aw.awlen;
+			if (w_hshake_count_comb == axi_aw.awlen) begin
+				axi_w.wlast <= 1'b1;
+				axi_w.wstrb <= axi_w_wstrb_comb;
+			end
+			else begin
+				axi_w.wlast <= 1'b0;
+				axi_w.wstrb <= '1;
+			end
 		end
 		else if (w_hshake_last) begin
 			axi_w.wvalid <= 1'b0;
@@ -199,7 +259,9 @@ end
 // ------- ------- ------- ------- ------- ------- ------- -------
 // Writing initiation pulse
 var logic write_burst_start;
-var logic [LEN_WIDTH-1:0] bytes_left;
+var logic [(LEN_WIDTH-8)-1:0] full_bursts_left;
+var logic [8-1:0] beats_left;
+var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] dest_addr;
 
 always_ff @(posedge clock) begin
@@ -223,7 +285,9 @@ always_ff @(posedge clock) begin
 			end
 			else begin
 				dest_addr <= mem_w.addr;
-				bytes_left <= mem_w.len[LEN_WIDTH-1:0];
+				full_bursts_left <= mem_w.len[LEN_WIDTH-1:8+ALIGN_WIDTH];
+				beats_left <= mem_w.len[8+ALIGN_WIDTH-1:ALIGN_WIDTH];
+				extra_bytes <= mem_w.len[ALIGN_WIDTH-1:0];
 				mem_w.busy <= 1'b1;
 				write_burst_start <= 1'b1;
 			end
@@ -232,10 +296,11 @@ always_ff @(posedge clock) begin
 		if (mem_w.busy == 1'b1 && write_burst_done) begin
 			$display("write_burst_done pulse");
 
-			// If bytes_left is > than the maximum transfer bytes,
-			if (bytes_left > MAX_NBYTES_PER_BURST[LEN_WIDTH - 1:0]) begin
+			if (full_bursts_left > 1 ||
+				(full_bursts_left == 1 && |{beats_left,extra_bytes}))
+			begin
 				dest_addr <= dest_addr + MAX_NBYTES_PER_BURST[AXI_ADDR_WIDTH-1:0];
-				bytes_left <= bytes_left - MAX_NBYTES_PER_BURST[LEN_WIDTH - 1:0];
+				full_bursts_left <= full_bursts_left - 1;
 				write_burst_start <= 1'b1;
 			end
 			else begin
