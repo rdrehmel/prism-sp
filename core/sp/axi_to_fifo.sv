@@ -33,8 +33,9 @@ module axi_to_fifo #
 	axi_read_channel.master axi_r
 );
 
-localparam integer MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
-localparam integer LEN_WIDTH = 16;
+localparam int MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
+localparam int LEN_WIDTH = 16;
+localparam int ALIGN_WIDTH = $clog2(AXI_DATA_WIDTH / 8);
 
 //
 // Set up the FIFO Write interface
@@ -82,16 +83,18 @@ always_ff @(posedge clock) begin
 			axi_ar.arvalid <= 1'b1;
 			axi_ar.araddr <= src_addr;
 
+			// Example for a 32-bit data width:
+			//
 			// 16       8       0
 			//  |-------|-------|
-			//   ...YYYXXXXXXXXAA
+			//   YYYYYYXXXXXXXXAA
 			//      YYY is the number of full bursts
 			// XXXXXXXX is the number of beats
-			//       AA is the number of alignment bits (for a 32-bit
-			//          data width)
+			//       AA is the number of extra bytes
+			//
 			// So this "if" condition below is just whether a Y bit is
 			// set.
-			if (bytes_left >= 16'(256 * (AXI_DATA_WIDTH / 8))) begin
+			if (full_bursts_left != '0) begin
 				axi_ar.arlen <= 255;
 			end
 			else begin
@@ -103,11 +106,10 @@ always_ff @(posedge clock) begin
 				// in bytes_left above bit (8+ALIGN-1) which cannot
 				// happen because these are the YYY bits so we would not
 				// end up here in the first place.
-				localparam int ALIGN = $clog2(AXI_DATA_WIDTH / 8);
-				if (bytes_left[ALIGN-1:0] != '0)
-					axi_ar.arlen <= bytes_left[ALIGN +:8];
+				if (extra_bytes != '0)
+					axi_ar.arlen <= beats_left;
 				else
-					axi_ar.arlen <= bytes_left[ALIGN +:8] - 1;
+					axi_ar.arlen <= beats_left - 1;
 			end
 		end
 		else if (ar_hshake) begin
@@ -179,7 +181,9 @@ end
 // ------- ------- ------- ------- ------- ------- ------- -------
 // Reading initiation pulse
 var logic read_burst_start;
-var logic [LEN_WIDTH-1:0] bytes_left;
+var logic [(LEN_WIDTH-8)-1:0] full_bursts_left;
+var logic [8-1:0] beats_left;
+var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] src_addr;
 
 always_ff @(posedge clock) begin
@@ -203,7 +207,9 @@ always_ff @(posedge clock) begin
 			end
 			else begin
 				src_addr <= mem_r.addr;
-				bytes_left <= mem_r.len[LEN_WIDTH-1:0];
+				full_bursts_left <= mem_r.len[LEN_WIDTH-1:8+ALIGN_WIDTH];
+				beats_left <= mem_r.len[8+ALIGN_WIDTH-1:ALIGN_WIDTH];
+				extra_bytes <= mem_r.len[ALIGN_WIDTH-1:0];
 				mem_r.busy <= 1'b1;
 				read_burst_start <= 1'b1;
 			end
@@ -212,9 +218,11 @@ always_ff @(posedge clock) begin
 		if (mem_r.busy == 1'b1 && read_burst_done) begin
 			$display("read_burst_done pulse");
 
-			if (bytes_left > MAX_NBYTES_PER_BURST[LEN_WIDTH - 1:0]) begin
+			if (full_bursts_left > 1 ||
+				(full_bursts_left == 1 && |{beats_left,extra_bytes}))
+			begin
 				src_addr <= src_addr + MAX_NBYTES_PER_BURST[AXI_ADDR_WIDTH-1:0];
-				bytes_left <= bytes_left - MAX_NBYTES_PER_BURST[LEN_WIDTH - 1:0];
+				full_bursts_left <= full_bursts_left - 1;
 				read_burst_start <= 1'b1;
 			end
 			else begin
