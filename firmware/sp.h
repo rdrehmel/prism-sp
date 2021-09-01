@@ -16,18 +16,22 @@
 #ifndef _SP_H_
 #define _SP_H_
 
+#include <stdbool.h>
+
 /*
  * These identifiers are found in the funct7 field of the instruction.
  * The SP unit decodes them to find out which instruction to execute.
  */
 #define SP_FUNCT7_RX_META_NELEMS		"0x0"
 #define SP_FUNCT7_RX_META_POP			"0x1"
+#define SP_FUNCT7_RX_META_EMPTY			"0x2"
 #define SP_FUNCT7_RX_DATA_SKIP			"0x4"
 #define SP_FUNCT7_RX_DATA_DMA_START		"0x5"
 #define SP_FUNCT7_RX_DATA_DMA_STATUS	"0x6"
 
 #define SP_FUNCT7_TX_META_NFREE			"0x8"
 #define SP_FUNCT7_TX_META_PUSH			"0x9"
+#define SP_FUNCT7_TX_META_FULL			"0xa"
 #define SP_FUNCT7_TX_DATA_SKIP			"0xc"
 #define SP_FUNCT7_TX_DATA_DMA_START		"0xd"
 #define SP_FUNCT7_TX_DATA_DMA_STATUS	"0xe"
@@ -35,6 +39,17 @@
 #define SP_FUNCT7_LOAD_REG				"0x10"
 #define SP_FUNCT7_STORE_REG				"0x11"
 #define SP_FUNCT7_PULSE					"0x1f"
+
+#define SP_MMR_R_BITN					8
+#define SP_REGN_CONTROL					0
+#define SP_REGN_RX_DMA_DESC_BASE_0		(1 << SP_MMR_R_BITN | 0)
+#define SP_REGN_RX_DMA_DESC_BASE_1		(1 << SP_MMR_R_BITN | 1)
+#define SP_REGN_TX_DMA_DESC_BASE_0		(1 << SP_MMR_R_BITN | 2)
+#define SP_REGN_TX_DMA_DESC_BASE_1		(1 << SP_MMR_R_BITN | 3)
+
+#define SP_CONTROL_ENABLE_RX_BITN		0
+#define SP_CONTROL_ENABLE_TX_BITN		1
+#define SP_CONTROL_START_TX_BITN		3
 
 /*
  * A custom instruction with
@@ -130,6 +145,15 @@ sp_rx_meta_pop_uint32()
 	return x;
 }
 
+static inline bool
+sp_rx_meta_empty()
+{
+	uint32_t x;
+
+	EMIT_INSN_100(SP_FUNCT7_RX_META_EMPTY, x);
+	return (bool)x;
+}
+
 static inline void
 sp_rx_data_skip(uint32_t length)
 {
@@ -150,6 +174,7 @@ static inline uint32_t
 sp_rx_data_dma_status()
 {
 	uint32_t x;
+
 	EMIT_INSN_100(SP_FUNCT7_RX_DATA_DMA_START, x);
 	return x;
 }
@@ -167,6 +192,15 @@ static inline void
 sp_tx_meta_push_uint32(uint32_t x)
 {
 	EMIT_INSN_010(SP_FUNCT7_TX_META_PUSH, x);
+}
+
+static inline bool
+sp_tx_meta_full()
+{
+	uint32_t x;
+
+	EMIT_INSN_100(SP_FUNCT7_TX_META_FULL, x);
+	return (bool)x;
 }
 
 /*
@@ -192,7 +226,7 @@ sp_load_reg(int i)
 {
 	uint32_t x;
 	EMIT_INSN_110(SP_FUNCT7_LOAD_REG, x, i);
-	return i;
+	return x;
 }
 
 static inline void
