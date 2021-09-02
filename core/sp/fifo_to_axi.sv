@@ -110,6 +110,11 @@ end
 //
 // ------- ------- ------- ------- ------- ------- ------- -------
 var logic [(AXI_DATA_WIDTH/8)-1:0] axi_w_wstrb_comb;
+/* Switch off verilator's linting because it does not
+ * honor the fact that the widths of the RHSs are
+ * correct iff the preceding if-clause is true.
+ */
+/* verilator lint_off WIDTH */
 always_comb begin
 if (AXI_DATA_WIDTH == 32) begin
 	case (extra_bytes)
@@ -152,6 +157,7 @@ else if (AXI_DATA_WIDTH == 128) begin
 	endcase
 end
 end
+/* verilator lint_on WIDTH */
 
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
@@ -259,7 +265,7 @@ end
 // ------- ------- ------- ------- ------- ------- ------- -------
 // Writing initiation pulse
 var logic write_burst_start;
-var logic [(LEN_WIDTH-8)-1:0] full_bursts_left;
+var logic [(LEN_WIDTH-8-ALIGN_WIDTH)-1:0] full_bursts_left;
 var logic [8-1:0] beats_left;
 var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] dest_addr;

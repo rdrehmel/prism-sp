@@ -181,7 +181,7 @@ end
 // ------- ------- ------- ------- ------- ------- ------- -------
 // Reading initiation pulse
 var logic read_burst_start;
-var logic [(LEN_WIDTH-8)-1:0] full_bursts_left;
+var logic [(LEN_WIDTH-8-ALIGN_WIDTH)-1:0] full_bursts_left;
 var logic [8-1:0] beats_left;
 var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] src_addr;
