@@ -16,7 +16,6 @@
 module sp_unit(
 	input wire logic clk,
 	input wire logic rst,
-	output wire logic gem_irq,
 	input sp_inputs_t sp_inputs,
 	unit_issue_interface.unit issue,
 	unit_writeback_interface.unit wb,
@@ -33,6 +32,7 @@ module sp_unit(
 
 	mmr_readwrite_interface.master mmr_rw,
 	mmr_read_interface.master mmr_r,
+	mmr_intr_interface.master mmr_i,
 
 	output wire logic [12:0] tx_packet_byte_count,
 	output wire logic [15:0] tx_data_fifo_wr_data_count_
@@ -593,16 +593,20 @@ always_ff @(posedge clk) begin
 	else begin
 		if (issue.new_request & issue.ready & issue_cmd[CMD_LOAD_REG]) begin
 			if (sp_inputs.rs1[MMR_R_BITN]) begin
+`ifndef VERILATOR
 				if (mmr_r.INDEX_WIDTH == 0)
 					load_reg_cur <= mmr_r.data[0];
 				else
 					load_reg_cur <= mmr_r.data[sp_inputs.rs1[0 +: mmr_r.INDEX_WIDTH]];
+`endif
 			end
 			else begin
+`ifndef VERILATOR
 				if (mmr_rw.INDEX_WIDTH == 0)
 					load_reg_cur <= mmr_rw.data[0];
 				else
 					load_reg_cur <= mmr_rw.data[sp_inputs.rs1[0 +: mmr_rw.INDEX_WIDTH]];
+`endif
 			end
 		end
 	end
@@ -644,11 +648,12 @@ always_ff @(posedge clk) begin
 
 		if (issue.new_request & issue.ready & issue_cmd[CMD_STORE_REG]) begin
 			mmr_rw.store <= 1'b1;
+`ifndef VERILATOR
 			if (mmr_rw.INDEX_WIDTH == 0)
 				mmr_rw.store_idx <= 0;
-			else begin
+			else
 				mmr_rw.store_idx <= sp_inputs.rs1[0 +:mmr_rw.INDEX_WIDTH];
-			end
+`endif
 			mmr_rw.store_data <= sp_inputs.rs2;
 		end
 	end
@@ -677,22 +682,22 @@ always_comb begin
 	end
 end
 
-var logic [IRQ_PULSE_NCYCLES-1:0] gem_irq_;
-assign gem_irq = |gem_irq_;
-
 always_ff @(posedge clk) begin
 	cmds_done_ff[CMD_PULSE] <= cmds_done_comb[CMD_PULSE];
 	cmds_busy_ff[CMD_PULSE] <= cmds_busy_comb[CMD_PULSE];
 
 	if (rst) begin
-		gem_irq_ <= '0;
+		for (int i = 0; i < mmr_i.N; i++)
+			mmr_i.isr_pulses[i] <= '0;
 	end
 	else begin
-		// Shift the register left by one.
-		gem_irq_ <= { gem_irq_[IRQ_PULSE_NCYCLES-2:0], 1'b0 };
+		// Unpulse
+		for (int i = 0; i < mmr_i.N; i++) begin
+			mmr_i.isr_pulses[i] <= '0;
+		end
 
 		if (issue.new_request & issue.ready & issue_cmd[CMD_PULSE]) begin
-			gem_irq_[0] <= 1'b1;
+			mmr_i.isr_pulses[sp_inputs.rs1[$clog2(mmr_i.N)-1:0]] <= sp_inputs.rs2;
 		end
 	end
 end
