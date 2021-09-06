@@ -19,8 +19,6 @@
 #include "picolibc_support.h"
 #include "uart.h"
 
-void serial_putc_stdout(int);
-
 int
 serial_putc(char c, FILE *file)
 {
