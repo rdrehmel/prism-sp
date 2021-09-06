@@ -38,7 +38,7 @@
 
 #define SP_FUNCT7_LOAD_REG				"0x10"
 #define SP_FUNCT7_STORE_REG				"0x11"
-#define SP_FUNCT7_PULSE					"0x1f"
+#define SP_FUNCT7_INTR					"0x1f"
 
 #define SP_MMR_R_BITN					8
 #define SP_REGN_CONTROL					0
@@ -123,6 +123,8 @@
 
 /*
  * This function gives the number of elements in the RX meta FIFO.
+ * Note that the hardware does not support this function currently.
+ * Use sp_rx_meta_empty() instead.
  */
 static inline uint32_t
 sp_rx_meta_nelems()
@@ -179,6 +181,10 @@ sp_rx_data_dma_status()
 	return x;
 }
 
+/*
+ * Note that the hardware does not support this function currently.
+ * Use sp_tx_meta_full() instead.
+ */
 static inline uint32_t
 sp_tx_meta_nfree()
 {
@@ -236,9 +242,9 @@ sp_store_reg(int i, uint32_t x)
 }
 
 static inline void
-sp_irq()
+sp_intr(int q, uint32_t x)
 {
-	EMIT_INSN_000(SP_FUNCT7_PULSE);
+	EMIT_INSN_011(SP_FUNCT7_INTR, q, x);
 }
 
 #endif
