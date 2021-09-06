@@ -40,8 +40,6 @@ module sp_unit(
 
 /* Descriptions are taken from the Xilinx UG1085
  */
-localparam int IRQ_PULSE_NCYCLES = 10;
-
 // RX
 localparam int RX_META_FIFO_WIDTH = 32;
 localparam int RX_META_FIFO_DEPTH = 64;
