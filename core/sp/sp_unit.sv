@@ -38,8 +38,6 @@ module sp_unit(
 	output wire logic [15:0] tx_data_fifo_wr_data_count_
 );
 
-/* Descriptions are taken from the Xilinx UG1085
- */
 // RX
 localparam int RX_META_FIFO_WIDTH = 32;
 localparam int RX_META_FIFO_DEPTH = 64;
