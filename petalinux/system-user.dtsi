@@ -1,0 +1,11 @@
+/include/ "system-conf.dtsi"
+/ {
+	chosen {
+		bootargs = "console=ttyPS0,115200n8 earlycon clk_ignore_unused cpuidle.off=1";
+	};
+};
+
+&gem3 {
+	interrupts = <0x0 0x59 0x4>, <0x0 0x59 0x4>;
+	prism-sp-handle = <&prism_sp_0>;
+};
