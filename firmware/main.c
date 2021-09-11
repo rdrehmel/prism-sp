@@ -161,7 +161,7 @@ rx(int q)
 	nrxdescs++;
 
 	// Send the RX done interrupt
-	gem_kick_rx(q);
+	gem_rx_done(q);
 }
 
 void
