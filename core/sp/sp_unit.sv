@@ -32,10 +32,7 @@ module sp_unit(
 
 	mmr_readwrite_interface.master mmr_rw,
 	mmr_read_interface.master mmr_r,
-	mmr_intr_interface.master mmr_i,
-
-	output wire logic [12:0] tx_packet_byte_count,
-	output wire logic [15:0] tx_data_fifo_wr_data_count_
+	mmr_intr_interface.master mmr_i
 );
 
 // RX
@@ -115,12 +112,12 @@ localparam int NCMDS = CMD_PULSE + 1;
 fifo_read_interface #(
 	.DATA_WIDTH(RX_META_FIFO_WIDTH)
 ) rx_meta_fifo_r();
-var logic [RX_META_FIFO_RD_DATA_COUNT_WIDTH-1:0] rx_meta_fifo_r_rd_data_count;
+wire logic [RX_META_FIFO_RD_DATA_COUNT_WIDTH-1:0] rx_meta_fifo_r_rd_data_count;
 
 fifo_write_interface #(
 	.DATA_WIDTH(RX_META_FIFO_WIDTH)
 ) rx_meta_fifo_w();
-var logic [RX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] rx_meta_fifo_w_wr_data_count;
+wire logic [RX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] rx_meta_fifo_w_wr_data_count;
 
 /*
  * Interfaces for the RX data FIFO
@@ -128,12 +125,12 @@ var logic [RX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] rx_meta_fifo_w_wr_data_count;
 fifo_read_interface #(
 	.DATA_WIDTH(RX_DATA_FIFO_WIDTH)
 ) rx_data_fifo_r();
-var logic [RX_DATA_FIFO_RD_DATA_COUNT_WIDTH-1:0] rx_data_fifo_r_rd_data_count;
+wire logic [RX_DATA_FIFO_RD_DATA_COUNT_WIDTH-1:0] rx_data_fifo_r_rd_data_count;
 
 fifo_write_interface #(
 	.DATA_WIDTH(RX_DATA_FIFO_WIDTH)
 ) rx_data_fifo_w();
-var logic [RX_DATA_FIFO_WR_DATA_COUNT_WIDTH-1:0] rx_data_fifo_w_wr_data_count;
+wire logic [RX_DATA_FIFO_WR_DATA_COUNT_WIDTH-1:0] rx_data_fifo_w_wr_data_count;
 
 memory_write_interface #(
 	.DATA_WIDTH(RX_DATA_FIFO_WIDTH),
@@ -146,12 +143,12 @@ memory_write_interface #(
 fifo_read_interface #(
 	.DATA_WIDTH(TX_META_FIFO_WIDTH)
 ) tx_meta_fifo_r();
-var logic [TX_META_FIFO_RD_DATA_COUNT_WIDTH-1:0] tx_meta_fifo_r_rd_data_count;
+wire logic [TX_META_FIFO_RD_DATA_COUNT_WIDTH-1:0] tx_meta_fifo_r_rd_data_count;
 
 fifo_write_interface #(
 	.DATA_WIDTH(TX_META_FIFO_WIDTH)
 ) tx_meta_fifo_w();
-var logic [TX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] tx_meta_fifo_w_wr_data_count;
+wire logic [TX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] tx_meta_fifo_w_wr_data_count;
 
 /*
  * Interfaces for the TX data FIFO
@@ -159,13 +156,12 @@ var logic [TX_META_FIFO_WR_DATA_COUNT_WIDTH-1:0] tx_meta_fifo_w_wr_data_count;
 fifo_read_interface #(
 	.DATA_WIDTH(TX_DATA_FIFO_WIDTH)
 ) tx_data_fifo_r();
-var logic [TX_DATA_FIFO_RD_DATA_COUNT_WIDTH-1:0] tx_data_fifo_r_rd_data_count;
+wire logic [TX_DATA_FIFO_RD_DATA_COUNT_WIDTH-1:0] tx_data_fifo_r_rd_data_count;
 
 fifo_write_interface #(
 	.DATA_WIDTH(TX_DATA_FIFO_WIDTH)
 ) tx_data_fifo_w();
-var logic [TX_DATA_FIFO_WR_DATA_COUNT_WIDTH-1:0] tx_data_fifo_w_wr_data_count;
-assign tx_data_fifo_wr_data_count_ = 16'(tx_data_fifo_w_wr_data_count);
+wire logic [TX_DATA_FIFO_WR_DATA_COUNT_WIDTH-1:0] tx_data_fifo_w_wr_data_count;
 
 memory_read_interface #(
 	.DATA_WIDTH(TX_DATA_FIFO_WIDTH),
@@ -839,7 +835,6 @@ end
 localparam int TX_PACKET_BYTE_COUNT_WIDTH = 13;
 var logic [TX_PACKET_BYTE_COUNT_WIDTH-1:0] tx_packet_byte_count_ff;
 var logic [TX_PACKET_BYTE_COUNT_WIDTH-1:0] tx_packet_byte_count_comb;
-assign tx_packet_byte_count = tx_packet_byte_count_ff;
 
 // Only two states: idle (0) and not idle (1).
 var logic tx_state = 1'b0;
@@ -995,8 +990,8 @@ xpm_fifo_async #(
 	.wr_clk(gem.rx_clock),
 	.wr_en(rx_meta_fifo_w.wr_en),
 	.din(rx_meta_fifo_w.wr_data),
-	.full(rx_meta_fifo_w.full)
-	//.wr_data_count(rx_meta_fifo_w_wr_data_count)
+	.full(rx_meta_fifo_w.full),
+	.wr_data_count(rx_meta_fifo_w_wr_data_count)
 
 	// for future reference:
 	//
@@ -1044,7 +1039,7 @@ xpm_fifo_async #(
 	.wr_clk(gem.rx_clock),
 	.wr_en(rx_data_fifo_w.wr_en),
 	.din(rx_data_fifo_w.wr_data),
-	//.wr_data_count(rx_data_fifo_w_wr_data_count)
+	.wr_data_count(rx_data_fifo_w_wr_data_count),
 
 	.rd_clk(clk),
 	.rd_en(rx_data_fifo_r.rd_en),
@@ -1081,8 +1076,7 @@ xpm_fifo_async #(
 	.rd_en(tx_meta_fifo_r.rd_en),
 	.dout(tx_meta_fifo_r.rd_data),
 	.empty(tx_meta_fifo_r.empty),
-	//.rd_data_count(tx_meta_fifo_r_rd_data_count),
-
+	.rd_data_count(tx_meta_fifo_r_rd_data_count), 
 	.wr_clk(clk),
 	.wr_en(tx_meta_fifo_w.wr_en),
 	.din(tx_meta_fifo_w.wr_data),
@@ -1122,14 +1116,14 @@ xpm_fifo_async #(
 
 	.rd_clk(gem.tx_clock),
 	.rd_en(tx_data_fifo_r.rd_en),
-	.dout(tx_data_fifo_r.rd_data)
-	//.rd_data_count(tx_data_fifo_r_rd_data_count)
+	.dout(tx_data_fifo_r.rd_data),
+	.rd_data_count(tx_data_fifo_r_rd_data_count)
 );
 `endif
 
 fifo_to_axi #(
 	.AXI_ADDR_WIDTH(32),
-	.AXI_DATA_WIDTH(32)
+	.AXI_DATA_WIDTH(RX_DATA_FIFO_WIDTH)
 )
 fifo_to_axi_0(
 	.clock(clk),
@@ -1143,7 +1137,7 @@ fifo_to_axi_0(
 
 axi_to_fifo #(
 	.AXI_ADDR_WIDTH(32),
-	.AXI_DATA_WIDTH(32)
+	.AXI_DATA_WIDTH(TX_DATA_FIFO_WIDTH)
 )
 axi_to_fifo_0(
 	.clock(clk),
