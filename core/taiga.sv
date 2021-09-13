@@ -44,14 +44,18 @@ module taiga (
 
 	gem_interface.slave gem,
 	output logic gem_irq,
-	fifo_write_interface.monitor_out rx_meta_fifo_write_mon,
-	fifo_read_interface.monitor_out rx_meta_fifo_read_mon,
+	fifo_write_interface.monitor_out rx_data_fifo_write_mon,
+	fifo_read_interface.monitor_out rx_data_fifo_read_mon,
 
 	axi_write_address_channel.master m_axi_dma_aw,
 	axi_write_channel.master m_axi_dma_w,
 	axi_write_response_channel.master m_axi_dma_b,
 	axi_read_address_channel.master m_axi_dma_ar,
-	axi_read_channel.master m_axi_dma_r
+	axi_read_channel.master m_axi_dma_r,
+
+	mmr_readwrite_interface.master mmr_rw,
+	mmr_read_interface.master mmr_r,
+	mmr_intr_interface.master mmr_i
 );
 
     l1_arbiter_request_interface l1_request[L1_CONNECTIONS]();
@@ -304,19 +308,6 @@ module taiga (
     //Trace Interface
     generate if (ENABLE_TRACE_INTERFACE) begin
         always_ff @(posedge clk) begin
-			tr.events.issue_gc_unit_new_request <= tr_issue_gc_unit_new_request;
-			tr.events.unit_needed <= tr_unit_needed;
-			tr.events.unit_needed_issue_stage <= tr_unit_needed_issue_stage;
-			tr.events.unit_needed_gc_unit <= tr_unit_needed_gc_unit;
-			tr.events.opcode_trim <= tr_opcode_trim;
-			tr.events.issue_new_request <= tr_issue_new_request;
-			tr.events.second_cycle_flush <= tr_second_cycle_flush;
-			tr.events.processing_csr <= tr_processing_csr;
-			tr.events.next_state_in <= tr_next_state_in;
-			tr.events.potential_branch_exception <= tr_potential_branch_exception;
-			tr.events.issue_stage_valid <= tr_issue_stage_valid;
-			tr.events.gc_issue_hold <= tr_gc_issue_hold;
-			tr.events.gc_fetch_flush <= tr_gc_fetch_flush;
             tr.events.operand_stall <= tr_operand_stall;
             tr.events.unit_stall <= tr_unit_stall;
             tr.events.no_id_stall <= tr_no_id_stall;
