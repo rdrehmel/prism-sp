@@ -222,19 +222,6 @@ package taiga_types;
     } fifo_type_t;
 
     typedef struct packed {
-		logic issue_gc_unit_new_request;
-		logic [NUM_UNITS-1:0] unit_needed;
-		logic [NUM_UNITS-1:0] unit_needed_issue_stage;
-		logic unit_needed_gc_unit;
-		logic [4:0] opcode_trim;
-		logic issue_new_request;
-		logic second_cycle_flush;
-		logic processing_csr;
-		logic next_state_in;
-		logic potential_branch_exception;
-		logic issue_stage_valid;
-		logic gc_issue_hold;
-		logic gc_fetch_flush;
         //Decode
         logic operand_stall;
         logic unit_stall;

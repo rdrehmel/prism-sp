@@ -47,12 +47,6 @@ module gc_unit(
         input exception_packet_t ls_exception,
         input logic ls_exception_is_store,
 
-		output logic tr_issue_new_request,
-		output logic tr_second_cycle_flush,
-		output logic tr_processing_csr,
-		output logic tr_next_state_in,
-		output logic tr_potential_branch_exception,
-
         //TLBs
         output logic tlb_on,
         output logic [ASIDLEN-1:0] asid,
@@ -204,12 +198,6 @@ module gc_unit(
     ////////////////////////////////////////////////////
     //GC Operation
     assign gc_fetch_flush = branch_flush | gc_fetch_pc_override;
-
-	assign tr_issue_new_request = issue.new_request;
-	assign tr_second_cycle_flush = second_cycle_flush;
-	assign tr_processing_csr = processing_csr;
-	assign tr_next_state_in = next_state inside {PRE_CLEAR_STATE, INIT_CLEAR_STATE, TLB_CLEAR_STATE, IQ_DRAIN};
-	assign tr_potential_branch_exception = potential_branch_exception;
 
     always_ff @ (posedge clk) begin
         gc_fetch_hold <=  next_state inside {PRE_CLEAR_STATE, INIT_CLEAR_STATE};

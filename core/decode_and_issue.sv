@@ -62,14 +62,6 @@ module decode_and_issue (
         output logic illegal_instruction,
 
         //Trace signals
-        output logic tr_issue_gc_unit_new_request,
-		output logic [NUM_UNITS-1:0] tr_unit_needed,
-		output logic [NUM_UNITS-1:0] tr_unit_needed_issue_stage,
-		output logic tr_unit_needed_gc_unit,
-		output logic [4:0] tr_opcode_trim,
-		output logic tr_issue_stage_valid,
-		output logic tr_gc_issue_hold,
-		output logic tr_gc_fetch_flush,
         output logic tr_operand_stall,
         output logic tr_unit_stall,
         output logic tr_no_id_stall,
@@ -589,17 +581,9 @@ module decode_and_issue (
             end
         end
 
-        assign tr_issue_gc_unit_new_request = unit_issue[GC_UNIT_ID].new_request;
-    	assign tr_issue_stage_valid = issue.stage_valid;
-		assign tr_gc_issue_hold = gc_issue_hold;
-		assign tr_gc_fetch_flush = gc_fetch_flush;
         assign tr_instruction_issued_dec = instruction_issued;
         assign tr_instruction_pc_dec = issue.pc;
         assign tr_instruction_data_dec = issue.instruction;
-        assign tr_opcode_trim = opcode_trim;
-        assign tr_unit_needed_gc_unit = unit_needed[GC_UNIT_ID];
-		assign tr_unit_needed = unit_needed;
-		assign tr_unit_needed_issue_stage = unit_needed_issue_stage;
     end endgenerate
 
 endmodule
