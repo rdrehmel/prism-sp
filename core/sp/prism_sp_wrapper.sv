@@ -31,8 +31,7 @@ module prism_sp_wrapper #(
 
 	output wire gem_irq,
 
-`define USE_BRAM_MON
-`ifdef USE_BRAM_MON
+`ifdef IBRAM_MON
 	// Instruction BRAM
 	output wire [31:0] ibram_addrb,
 	output wire ibram_clkb,
@@ -41,7 +40,9 @@ module prism_sp_wrapper #(
 	output wire ibram_enb,
 	output wire ibram_rstb,
 	output wire [3:0] ibram_web,
+`endif
 
+`ifdef DBRAM_MON
 	// Data BRAM
 	output wire [31:0] dbram_addrb,
 	output wire dbram_clkb,
@@ -52,6 +53,7 @@ module prism_sp_wrapper #(
 	output wire [3:0] dbram_web,
 `endif
 
+`ifdef RX_DATA_FIFO_MON
 	// FIFO
 	output wire [RX_META_FIFO_WRITE_WIDTH-1:0] rx_data_fifo_write_wr_data,
 	output wire rx_data_fifo_write_wr_en,
@@ -63,23 +65,9 @@ module prism_sp_wrapper #(
 	output wire rx_data_fifo_read_rd_en,
 	output wire rx_data_fifo_read_empty,
 	output wire rx_data_fifo_read_almost_empty,
+`endif
 
-	output wire [31:0] instr_pc,
-	output wire [31:0] instr_data,
-
-	output wire e_issue_gc_unit_new_request,
-	output wire [9:0] e_unit_needed,
-	output wire [9:0] e_unit_needed_issue_stage,
-	output wire e_unit_needed_gc_unit,
-	output wire [4:0] e_opcode_trim,
-	output wire e_issue_new_request,
-	output wire e_second_cycle_flush,
-	output wire e_processing_csr,
-	output wire e_next_state_in,
-	output wire e_potential_branch_exception,
-	output wire e_issue_stage_valid,
-	output wire e_gc_issue_hold,
-	output wire e_gc_fetch_flush,
+`ifdef TRACE_SIGNALS
 	output wire e_operand_stall,
 	output wire e_unit_stall,
 	output wire e_no_id_stall,
@@ -101,6 +89,7 @@ module prism_sp_wrapper #(
 	output wire e_branch_misspredict,
 	output wire e_return_correct,
 	output wire e_return_misspredict,
+`endif
 
 	// AXI-lite slave interface
 	input wire s_axil_awvalid,
@@ -221,33 +210,11 @@ module prism_sp_wrapper #(
 	input wire [44:0] gem_rx_w_status,
 	input wire gem_rx_w_err,
 	output wire gem_rx_w_overflow,
-	input wire gem_rx_w_flush,
-
-	// Various temporary debug signals
-	output wire [12:0] tx_packet_byte_count,
-	output wire [15:0] tx_data_fifo_wr_data_count_
+	input wire gem_rx_w_flush
 );
 
+`ifdef TRACE_SIGNALS
 trace_outputs_t tr;
-
-assign instr_pc = tr.instruction_pc_dec;
-assign instr_data = tr.instruction_data_dec;
-
-assign e_issue_gc_unit_new_request = tr.events.issue_gc_unit_new_request;
-assign e_unit_needed = tr.events.unit_needed;
-assign e_unit_needed_issue_stage = tr.events.unit_needed_issue_stage;
-assign e_unit_needed_gc_unit = tr.events.unit_needed_gc_unit;
-assign e_opcode_trim = tr.events.opcode_trim;
-
-assign e_issue_new_request = tr.events.issue_new_request;
-assign e_second_cycle_flush = tr.events.second_cycle_flush;
-assign e_processing_csr = tr.events.processing_csr;
-assign e_next_state_in = tr.events.next_state_in;
-assign e_potential_branch_exception = tr.events.potential_branch_exception;
-assign e_issue_stage_valid = tr.events.issue_stage_valid;
-assign e_gc_issue_hold = tr.events.gc_issue_hold;
-assign e_gc_fetch_flush = tr.events.gc_fetch_flush;
-
 assign e_operand_stall = tr.events.operand_stall;
 assign e_unit_stall = tr.events.unit_stall;
 assign e_no_id_stall = tr.events.no_id_stall;
@@ -269,25 +236,30 @@ assign e_branch_correct = tr.events.branch_correct;
 assign e_branch_misspredict = tr.events.branch_misspredict;
 assign e_return_correct = tr.events.return_correct;
 assign e_return_misspredict = tr.events.return_misspredict;
+`endif
 
 /*
  * Local memory interfaces
  */
 local_memory_interface instruction_bram();
 local_memory_interface instruction_bram_mmr();
+`ifdef IBRAM_MON
 assign ibram_addrb = instruction_bram_mmr.addr;
 assign ibram_dinb = instruction_bram_mmr.data_in;
 assign ibram_doutb = instruction_bram_mmr.data_out;
 assign ibram_enb = instruction_bram_mmr.en;
 assign ibram_web = instruction_bram_mmr.be;
+`endif
 
 local_memory_interface data_bram();
 local_memory_interface data_bram_mmr();
+`ifdef DBRAM_MON
 assign dbram_addrb = data_bram_mmr.addr;
 assign dbram_dinb = data_bram_mmr.data_in;
 assign dbram_doutb = data_bram_mmr.data_out;
 assign dbram_enb = data_bram_mmr.en;
 assign dbram_web = data_bram_mmr.be;
+`endif
 
 /*
  * AXI IO
@@ -404,9 +376,6 @@ assign gem.rx_w_err = gem_rx_w_err;
 assign gem_rx_w_overflow = gem.rx_w_overflow;
 assign gem.rx_w_flush = gem_rx_w_flush;
 
-wire timer_interrupt;
-wire interrupt;
-
 fifo_write_interface #(.DATA_WIDTH(RX_META_FIFO_WRITE_WIDTH)) rx_data_fifo_write_mon();
 assign rx_data_fifo_write_wr_en = rx_data_fifo_write_mon.wr_en;
 assign rx_data_fifo_write_wr_data = rx_data_fifo_write_mon.wr_data;
@@ -418,6 +387,10 @@ assign rx_data_fifo_read_rd_data = rx_data_fifo_read_mon.rd_data;
 assign rx_data_fifo_read_almost_empty = rx_data_fifo_read_mon.almost_empty;
 assign rx_data_fifo_read_empty = rx_data_fifo_read_mon.empty;
 
+// These signals are inputs to the Taiga core and are
+// needed for now.
+wire logic timer_interrupt;
+wire logic interrupt;
 avalon_interface m_avalon();
 wishbone_interface m_wishbone();
 l2_requester_interface l2();
