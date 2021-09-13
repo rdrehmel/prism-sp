@@ -61,7 +61,6 @@ package taiga_config;
     //Enable Atomic extension (cache operations only)
     localparam USE_AMO = 0;
 
-
     ////////////////////////////////////////////////////
     //Memory Sources
     //Must select at least one source for instruction and data interfaces
@@ -87,20 +86,23 @@ package taiga_config;
 
     ////////////////////////////////////////////////////
     //Address space
-    localparam SCRATCH_ADDR_L = 32'h80000000;
-    localparam SCRATCH_ADDR_H = 32'h8001FFFF;
-    localparam SCRATCH_BIT_CHECK = 4;
+    localparam SCRATCH_ADDR_L = 32'h00020000;
+    localparam SCRATCH_ADDR_H = 32'h0002FFFF;
+    localparam SCRATCH_BIT_CHECK = 16;
 
-    localparam MEMORY_ADDR_L = 32'h40000000;
-    localparam MEMORY_ADDR_H = 32'h4FFFFFFF;
-    localparam MEMORY_BIT_CHECK = 4;
+    localparam MEMORY_ADDR_L = 32'h00000000;
+    localparam MEMORY_ADDR_H = 32'h00001FFF;
+    localparam MEMORY_BIT_CHECK = 20;
 
-    localparam BUS_ADDR_L = 32'hF0000000;
-    localparam BUS_ADDR_H = 32'hFFFFFFFF;
-    localparam BUS_BIT_CHECK = 4;
+    localparam BUS0_ADDR_L = 32'h00020000;
+    localparam BUS0_ADDR_H = 32'h0002FFFF;
+    localparam BUS0_BIT_CHECK = 16;
+    localparam BUS1_ADDR_L = 32'hF0000000;
+    localparam BUS1_ADDR_H = 32'hFFFFFFFF;
+    localparam BUS1_BIT_CHECK = 4;
 
     //PC address on reset
-    localparam bit[31:0] RESET_VEC = 32'h80000000;
+    localparam bit[31:0] RESET_VEC = 32'h00020000;
 
     ////////////////////////////////////////////////////
     //Bus Options
@@ -172,7 +174,7 @@ package taiga_config;
     ////////////////////////////////////////////////////
     //Trace Options
     //Trace interface is necessary for verilator simulation
-    localparam ENABLE_TRACE_INTERFACE = 1;
+    localparam ENABLE_TRACE_INTERFACE = 0;
 
 
     ////////////////////////////////////////////////////
