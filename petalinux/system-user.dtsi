@@ -7,5 +7,5 @@
 
 &gem3 {
 	interrupts = <0x0 0x59 0x4>, <0x0 0x59 0x4>;
-	prism-sp-handle = <&prism_sp_0>;
+	prism-sp = <&prism_sp_0>;
 };
