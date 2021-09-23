@@ -82,7 +82,7 @@ typedef enum logic [4:0] {
 
 	SP_FUNC7_LOAD_REG			= 5'b10000,
 	SP_FUNC7_STORE_REG			= 5'b10001,
-	SP_FUNC7_PULSE				= 5'b11111
+	SP_FUNC7_INTR				= 5'b11111
 } sp_func7_t;
 
 localparam int CMD_RX_META_NELEMS		= 0;
