@@ -102,9 +102,9 @@ localparam int CMD_TX_DATA_DMA_STATUS	= CMD_TX_DATA_DMA_START + 1;
 localparam int CMD_LOAD_REG				= CMD_TX_DATA_DMA_STATUS + 1;
 localparam int CMD_STORE_REG			= CMD_LOAD_REG + 1;
 
-localparam int CMD_PULSE				= CMD_STORE_REG + 1;
+localparam int CMD_INTR					= CMD_STORE_REG + 1;
 
-localparam int NCMDS = CMD_PULSE + 1;
+localparam int NCMDS = CMD_INTR + 1;
 
 /*
  * Interfaces for the RX meta FIFO
@@ -216,7 +216,7 @@ always_comb begin
 	SP_FUNC7_TX_DATA_DMA_STATUS: issue_cmd[CMD_TX_DATA_DMA_STATUS] = 1'b1;
 	SP_FUNC7_STORE_REG: issue_cmd[CMD_STORE_REG] = 1'b1;
 	SP_FUNC7_LOAD_REG: issue_cmd[CMD_LOAD_REG] = 1'b1;
-	SP_FUNC7_PULSE: issue_cmd[CMD_PULSE] = 1'b1;
+	SP_FUNC7_INTR: issue_cmd[CMD_INTR] = 1'b1;
 	default: begin end
 	endcase
 end
@@ -652,31 +652,31 @@ always_ff @(posedge clk) begin
 end
 
 /*
- * Command "PULSE"
+ * Command "INTR"
  */
 always_comb begin
-	cmds_done_comb[CMD_PULSE] = cmds_done_ff[CMD_PULSE];
-	cmds_busy_comb[CMD_PULSE] = cmds_busy_ff[CMD_PULSE];
+	cmds_done_comb[CMD_INTR] = cmds_done_ff[CMD_INTR];
+	cmds_busy_comb[CMD_INTR] = cmds_busy_ff[CMD_INTR];
 
 	if (rst) begin
-		cmds_done_comb[CMD_PULSE] = 1'b0;
-		cmds_busy_comb[CMD_PULSE] = 1'b0;
+		cmds_done_comb[CMD_INTR] = 1'b0;
+		cmds_busy_comb[CMD_INTR] = 1'b0;
 	end
 	else begin
-		if (issue.new_request & issue.ready & issue_cmd[CMD_PULSE]) begin
-			cmds_done_comb[CMD_PULSE] = 1'b1;
-			cmds_busy_comb[CMD_PULSE] = 1'b1;
+		if (issue.new_request & issue.ready & issue_cmd[CMD_INTR]) begin
+			cmds_done_comb[CMD_INTR] = 1'b1;
+			cmds_busy_comb[CMD_INTR] = 1'b1;
 		end
-		if (cmds_done_ff[CMD_PULSE] & wb.ack) begin
-			cmds_done_comb[CMD_PULSE] = 1'b0;
-			cmds_busy_comb[CMD_PULSE] = 1'b0;
+		if (cmds_done_ff[CMD_INTR] & wb.ack) begin
+			cmds_done_comb[CMD_INTR] = 1'b0;
+			cmds_busy_comb[CMD_INTR] = 1'b0;
 		end
 	end
 end
 
 always_ff @(posedge clk) begin
-	cmds_done_ff[CMD_PULSE] <= cmds_done_comb[CMD_PULSE];
-	cmds_busy_ff[CMD_PULSE] <= cmds_busy_comb[CMD_PULSE];
+	cmds_done_ff[CMD_INTR] <= cmds_done_comb[CMD_INTR];
+	cmds_busy_ff[CMD_INTR] <= cmds_busy_comb[CMD_INTR];
 
 	if (rst) begin
 		for (int i = 0; i < mmr_i.N; i++)
@@ -688,7 +688,7 @@ always_ff @(posedge clk) begin
 			mmr_i.isr_pulses[i] <= '0;
 		end
 
-		if (issue.new_request & issue.ready & issue_cmd[CMD_PULSE]) begin
+		if (issue.new_request & issue.ready & issue_cmd[CMD_INTR]) begin
 			mmr_i.isr_pulses[sp_inputs.rs1[$clog2(mmr_i.N)-1:0]] <= sp_inputs.rs2;
 		end
 	end
