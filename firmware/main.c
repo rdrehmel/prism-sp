@@ -146,7 +146,7 @@ rx(int q)
 	*(dma_descp + 0) = dma_desc_0;
 	// Set all the other parameters.
 	*(dma_descp + 1) = meta_desc;
-#ifdef DEBUG
+#ifdef DEBUG_VERBOSE
 	printf("Value 0x%08x written to %p\n", dma_desc_0, dma_descp);
 	printf("Value 0x%08x written to %p\n", meta_desc, dma_descp + 1);
 #endif
