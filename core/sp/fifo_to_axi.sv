@@ -18,8 +18,7 @@
 //
 module fifo_to_axi
 #(
-	parameter integer AXI_ADDR_WIDTH = 32,
-	parameter integer AXI_DATA_WIDTH = 32
+	parameter integer AXI_ADDR_WIDTH = 32
 )
 (
 	input wire clock,
@@ -36,6 +35,7 @@ module fifo_to_axi
 	axi_write_response_channel.master axi_b
 );
 
+localparam int AXI_DATA_WIDTH = axi_w.AXI_WDATA_WIDTH;
 localparam int MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
 localparam int LEN_WIDTH = 16;
 localparam int ALIGN_WIDTH = $clog2(AXI_DATA_WIDTH / 8);
@@ -181,7 +181,10 @@ always_ff @(posedge clock) begin
 			axi_w.wdata <= fifo_r.rd_data;
 			if (w_hshake_count_comb == axi_aw.awlen) begin
 				axi_w.wlast <= 1'b1;
-				axi_w.wstrb <= axi_w_wstrb_comb;
+				if (full_bursts_left == '0)
+					axi_w.wstrb <= axi_w_wstrb_comb;
+				else
+					axi_w.wstrb <= '1;
 			end
 			else begin
 				axi_w.wlast <= 1'b0;
@@ -266,7 +269,7 @@ end
 // Writing initiation pulse
 var logic write_burst_start;
 var logic [(LEN_WIDTH-8-ALIGN_WIDTH)-1:0] full_bursts_left;
-var logic [8-1:0] beats_left;
+var logic [7:0] beats_left;
 var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] dest_addr;
 
