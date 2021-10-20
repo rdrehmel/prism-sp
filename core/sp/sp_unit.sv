@@ -39,7 +39,7 @@ module sp_unit(
 localparam int RX_META_FIFO_WIDTH = 32;
 localparam int RX_META_FIFO_DEPTH = 64;
 // SIZE in bytes
-localparam int RX_DATA_FIFO_WIDTH = 32;
+localparam int RX_DATA_FIFO_WIDTH = m_axi_dma_w.AXI_WDATA_WIDTH;
 localparam int RX_DATA_FIFO_SIZE = 2**16;
 localparam int RX_DATA_FIFO_DEPTH = RX_DATA_FIFO_SIZE / RX_DATA_FIFO_WIDTH;
 
@@ -52,7 +52,7 @@ localparam int RX_DATA_FIFO_WR_DATA_COUNT_WIDTH = $clog2(RX_DATA_FIFO_DEPTH) + 1
 localparam int TX_META_FIFO_WIDTH = 32;
 localparam int TX_META_FIFO_DEPTH = 64;
 // SIZE in bytes
-localparam int TX_DATA_FIFO_WIDTH = 32;
+localparam int TX_DATA_FIFO_WIDTH = m_axi_dma_r.AXI_RDATA_WIDTH;
 localparam int TX_DATA_FIFO_SIZE = 2**16;
 localparam int TX_DATA_FIFO_DEPTH = TX_DATA_FIFO_SIZE / TX_DATA_FIFO_WIDTH;
 
@@ -61,8 +61,20 @@ localparam int TX_META_FIFO_WR_DATA_COUNT_WIDTH = $clog2(TX_META_FIFO_DEPTH) + 1
 localparam int TX_DATA_FIFO_RD_DATA_COUNT_WIDTH = $clog2(TX_DATA_FIFO_DEPTH) + 1;
 localparam int TX_DATA_FIFO_WR_DATA_COUNT_WIDTH = $clog2(TX_DATA_FIFO_DEPTH) + 1;
 
+localparam int TX_META_DESC_NOCRC_BITN = 31;
+
 if (TX_DATA_FIFO_WIDTH < 32) begin
 	$error("We don't support a TX DATA FIFO width of less than 32.");
+end
+
+// This is currently redundant.
+// But we might need it later in a transitional phase when both constants
+// are made independent of each other.
+if (m_axi_dma_w.AXI_WDATA_WIDTH != RX_DATA_FIFO_WIDTH) begin
+	$error("We don't support m_axi_dma_w.AXI_WDATA_WIDTH != RX_DATA_FIFO_WIDTH)");
+end
+if (m_axi_dma_r.AXI_RDATA_WIDTH != TX_DATA_FIFO_WIDTH) begin
+	$error("We don't support m_axi_dma_r.AXI_RDATA_WIDTH != TX_DATA_FIFO_WIDTH)");
 end
 
 typedef enum logic [4:0] {
@@ -509,6 +521,7 @@ always_ff @(posedge clk) begin
 			tx_data_mem_r.start <= 1'b1;
 			tx_data_mem_r.addr <= sp_inputs.rs1;
 			tx_data_mem_r.len <= sp_inputs.rs2[15:0];
+			tx_data_mem_r.cont <= sp_inputs.rs2[31];
 		end
 	end
 end
@@ -873,6 +886,7 @@ always_ff @(posedge gem.tx_clock) begin
 	else begin
 		// Unpulse
 		gem.tx_r_valid <= 1'b0;
+		gem.tx_r_eop <= 1'b0;
 		tx_meta_fifo_r.rd_en <= 1'b0;
 		tx_data_fifo_r.rd_en <= 1'b0;
 
@@ -884,6 +898,7 @@ always_ff @(posedge gem.tx_clock) begin
 				gem.tx_r_data_rdy <= 1'b1;
 				tx_state <= 1'b1;
 				tx_meta_fifo_r.rd_en <= 1'b1;
+				gem.tx_r_control <= tx_meta_fifo_r.rd_data[TX_META_DESC_NOCRC_BITN];
 				tx_data_fifo_r.rd_en <= 1'b1;
 				tx_cur_buf <= tx_data_fifo_r.rd_data;
 				tx_cur_buf_valid <= '1;
@@ -925,9 +940,6 @@ always_ff @(posedge gem.tx_clock) begin
 				if (tx_packet_byte_count_comb == '0) begin
 					gem.tx_r_eop <= 1'b1;
 					tx_state <= 1'b0;
-				end
-				else begin
-					gem.tx_r_eop <= 1'b0;
 				end
 			end
 		end
@@ -1122,8 +1134,7 @@ xpm_fifo_async #(
 `endif
 
 fifo_to_axi #(
-	.AXI_ADDR_WIDTH(32),
-	.AXI_DATA_WIDTH(RX_DATA_FIFO_WIDTH)
+	.AXI_ADDR_WIDTH(32)
 )
 fifo_to_axi_0(
 	.clock(clk),
@@ -1136,8 +1147,7 @@ fifo_to_axi_0(
 );
 
 axi_to_fifo #(
-	.AXI_ADDR_WIDTH(32),
-	.AXI_DATA_WIDTH(TX_DATA_FIFO_WIDTH)
+	.AXI_ADDR_WIDTH(32)
 )
 axi_to_fifo_0(
 	.clock(clk),
