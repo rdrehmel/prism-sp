@@ -80,6 +80,7 @@
 
 #define GEM_TX_DD0_ADDR_BITN					0
 #define GEM_TX_DD1_EOF_BITN						15
+#define GEM_TX_DD1_NOCRC_BITN					16
 #define GEM_TX_DD1_WRAP_BITN					30
 #define GEM_TX_DD1_VALID_BITN					31
 
@@ -92,5 +93,6 @@
 #define GEM_RECEIVE_Q1_PTR_OFFSET				0x480
 
 #define GEM_NETWORK_CONFIG_DATA_BUS_WIDTH_BITN	21
+#define TX_META_DESC_NO_CRC_BITN		31
 
 #endif // _GEM_H_
