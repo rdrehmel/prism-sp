@@ -117,8 +117,9 @@ assign out = {
 	1'b0,
 	// 23:22 either or type id match status or RX checksum offloading status,
 	//       depending on whether RX checksum offloading is disabled.
-	//       We only support disabled checksum offloading for now.
-	typeid_match,
+	//       We only support enabled checksum offloading for now.
+	//typeid_match,
+	chksum_enc,
 	// 21
 	rx_w_vlan_tagged,
 	// 20

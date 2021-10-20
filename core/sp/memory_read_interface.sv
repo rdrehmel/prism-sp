@@ -24,6 +24,9 @@ logic [LEN_WIDTH-1:0] len;
 
 // Asserted to request a new memory transfer.
 logic start;
+// Asserted along with 'start' to merge the extra bytes with the first
+// bytes of the next transfer.
+logic cont;
 // Asserted while no new request can be accepted.
 logic busy;
 // Asserted when read transaction is complete.
@@ -36,6 +39,7 @@ modport master (
 	output addr,
 	output len,
 	output start,
+	output cont,
 	input busy,
 	input done,
 	input error
@@ -44,6 +48,7 @@ modport slave (
 	input addr,
 	input len,
 	input start,
+	input cont,
 	output busy,
 	output done,
 	output error

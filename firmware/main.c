@@ -21,7 +21,7 @@
 #include "gem.h"
 
 #define NQUEUES					2
-#define DEBUG
+//#define DEBUG
 
 typedef uint32_t gem_rx_dma_desc_type;
 typedef uint32_t gem_tx_dma_desc_type;
@@ -202,6 +202,7 @@ tx(int q)
 	gem_tx_dma_desc_type *packet_dma_descp;
 	gem_tx_dma_desc_type packet_dma_desc_1;
 	int packet_length = 0;
+	bool no_crc;
 
 	for (;;) {
 		// Get the next descriptor from DRAM
@@ -210,7 +211,9 @@ tx(int q)
 		gem_tx_dma_desc_type dma_desc_1 = *(dma_descp + 1);
 
 		if (dma_desc_1 & (1 << GEM_TX_DD1_VALID_BITN)) {
+#ifdef DEBUG
 			printf("TX: [%p] BUSY\n", dma_descp);
+#endif
 			break;
 		}
 
@@ -219,6 +222,7 @@ tx(int q)
 			// Save the pointer to the first descriptor of the packet.
 			packet_dma_descp = dma_descp;
 			packet_dma_desc_1 = dma_desc_1;
+			no_crc = (dma_desc_1 & (1 << GEM_TX_DD1_NOCRC_BITN)) != 0;
 		}
 
 		// Get the DRAM address and length of the payload buffer
@@ -231,7 +235,8 @@ tx(int q)
 			dma_descp, dma_desc_0, dma_desc_1, data_addr, data_length);
 #endif
 
-		sp_tx_data_dma_start(data_addr, data_length);
+		bool eof = (dma_desc_1 & (1 << GEM_TX_DD1_EOF_BITN)) != 0;
+		sp_tx_data_dma_start(data_addr, (uint32_t)!eof << 31 | data_length);
 		for (;;) {
 			uint32_t status = sp_tx_data_dma_status();
 			if (status == 0)
@@ -251,14 +256,14 @@ tx(int q)
 			queue->cur_tx_dma_desc_addr += 2;
 		}
 
-		if (dma_desc_1 & (1 << GEM_TX_DD1_EOF_BITN)) {
+		if (eof) {
 			// Mark the first descriptor of this packet as usable by the driver
 			// Note that only the first descriptor is set to valid.
 			packet_dma_desc_1 |= (uint32_t)1 << GEM_TX_DD1_VALID_BITN;
 			*(packet_dma_descp + 1) = packet_dma_desc_1;
 
 			// Store the descriptor in the BRAM
-			sp_tx_meta_push_uint32(packet_length);
+			sp_tx_meta_push_uint32((uint32_t)no_crc << TX_META_DESC_NO_CRC_BITN | packet_length);
 
 			packet_length = 0;
 			break;
