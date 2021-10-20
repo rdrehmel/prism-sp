@@ -23,7 +23,7 @@ module prism_sp_wrapper #(
 	parameter int C_M_AXI_IO_ADDR_WIDTH = 32,
 	parameter int C_M_AXI_IO_DATA_WIDTH = 32,
 	parameter int C_M_AXI_DMA_ADDR_WIDTH = 32,
-	parameter int C_M_AXI_DMA_DATA_WIDTH = 64,
+	parameter int C_M_AXI_DMA_DATA_WIDTH = 32,
 	parameter int C_S_AXIL_ADDR_WIDTH = 32,
 	parameter int C_S_AXIL_DATA_WIDTH = 32
 )
