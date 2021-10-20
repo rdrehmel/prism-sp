@@ -20,8 +20,10 @@ import l2_config_and_types::*;
 module prism_sp_wrapper #(
 	parameter int RX_META_FIFO_READ_WIDTH = 32,
 	parameter int RX_META_FIFO_WRITE_WIDTH = 32,
-	parameter int C_M_AXI_ADDR_WIDTH = 32,
-	parameter int C_M_AXI_DATA_WIDTH = 32,
+	parameter int C_M_AXI_IO_ADDR_WIDTH = 32,
+	parameter int C_M_AXI_IO_DATA_WIDTH = 32,
+	parameter int C_M_AXI_DMA_ADDR_WIDTH = 32,
+	parameter int C_M_AXI_DMA_DATA_WIDTH = 64,
 	parameter int C_S_AXIL_ADDR_WIDTH = 32,
 	parameter int C_S_AXIL_DATA_WIDTH = 32
 )
@@ -119,7 +121,7 @@ module prism_sp_wrapper #(
 	// IO access
 	output wire m_axi_io_arvalid,
 	input wire m_axi_io_arready,
-	output wire [C_M_AXI_ADDR_WIDTH-1:0] m_axi_io_araddr,
+	output wire [C_M_AXI_IO_ADDR_WIDTH-1:0] m_axi_io_araddr,
 	output wire [7:0] m_axi_io_arlen,
 	output wire [2:0] m_axi_io_arsize,
 	output wire [1:0] m_axi_io_arburst,
@@ -127,13 +129,13 @@ module prism_sp_wrapper #(
 	output wire [5:0] m_axi_io_arid,
 	input wire m_axi_io_rvalid,
 	output wire m_axi_io_rready,
-	input wire [C_M_AXI_DATA_WIDTH-1:0] m_axi_io_rdata,
+	input wire [C_M_AXI_IO_DATA_WIDTH-1:0] m_axi_io_rdata,
 	input wire [1:0] m_axi_io_rresp,
 	input wire m_axi_io_rlast,
 	input wire [5:0] m_axi_io_rid,
 	output wire m_axi_io_awvalid,
 	input wire m_axi_io_awready,
-	output wire [C_M_AXI_ADDR_WIDTH-1:0] m_axi_io_awaddr,
+	output wire [C_M_AXI_IO_ADDR_WIDTH-1:0] m_axi_io_awaddr,
 	output wire [7:0] m_axi_io_awlen,
 	output wire [2:0] m_axi_io_awsize,
 	output wire [1:0] m_axi_io_awburst,
@@ -141,8 +143,8 @@ module prism_sp_wrapper #(
 	output wire [5:0] m_axi_io_awid,
 	output wire m_axi_io_wvalid,
 	input wire m_axi_io_wready,
-	output wire [C_M_AXI_DATA_WIDTH-1:0] m_axi_io_wdata,
-	output wire [(C_M_AXI_DATA_WIDTH/8)-1:0] m_axi_io_wstrb,
+	output wire [C_M_AXI_IO_DATA_WIDTH-1:0] m_axi_io_wdata,
+	output wire [(C_M_AXI_IO_DATA_WIDTH/8)-1:0] m_axi_io_wstrb,
 	output wire m_axi_io_wlast,
 	input wire m_axi_io_bvalid,
 	output wire m_axi_io_bready,
@@ -152,7 +154,7 @@ module prism_sp_wrapper #(
 	// GEM DMA
 	input wire m_axi_dma_arready,
 	output wire m_axi_dma_arvalid,
-	output wire [C_M_AXI_ADDR_WIDTH-1:0] m_axi_dma_araddr,
+	output wire [C_M_AXI_DMA_ADDR_WIDTH-1:0] m_axi_dma_araddr,
 	output wire [7:0] m_axi_dma_arlen,
 	output wire [2:0] m_axi_dma_arsize,
 	output wire [1:0] m_axi_dma_arburst,
@@ -160,13 +162,13 @@ module prism_sp_wrapper #(
 	output wire [5:0] m_axi_dma_arid,
 	output wire m_axi_dma_rready,
 	input wire m_axi_dma_rvalid,
-	input wire [C_M_AXI_DATA_WIDTH-1:0] m_axi_dma_rdata,
+	input wire [C_M_AXI_DMA_DATA_WIDTH-1:0] m_axi_dma_rdata,
 	input wire [1:0] m_axi_dma_rresp,
 	input wire m_axi_dma_rlast,
 	input wire [5:0] m_axi_dma_rid,
 	input wire m_axi_dma_awready,
 	output wire m_axi_dma_awvalid,
-	output wire [C_M_AXI_ADDR_WIDTH-1:0] m_axi_dma_awaddr,
+	output wire [C_M_AXI_DMA_ADDR_WIDTH-1:0] m_axi_dma_awaddr,
 	output wire [7:0] m_axi_dma_awlen,
 	output wire [2:0] m_axi_dma_awsize,
 	output wire [1:0] m_axi_dma_awburst,
@@ -174,8 +176,8 @@ module prism_sp_wrapper #(
 	output wire [5:0] m_axi_dma_awid,
 	input wire m_axi_dma_wready,
 	output wire m_axi_dma_wvalid,
-	output wire [C_M_AXI_DATA_WIDTH-1:0] m_axi_dma_wdata,
-	output wire [(C_M_AXI_DATA_WIDTH/8)-1:0] m_axi_dma_wstrb,
+	output wire [C_M_AXI_DMA_DATA_WIDTH-1:0] m_axi_dma_wdata,
+	output wire [(C_M_AXI_DMA_DATA_WIDTH/8)-1:0] m_axi_dma_wstrb,
 	output wire m_axi_dma_wlast,
 	input wire m_axi_dma_bvalid,
 	output wire m_axi_dma_bready,
@@ -305,10 +307,16 @@ assign m_axi_io_bready = m_axi_io.bready;
  * AXI DMA
  */
 axi_write_address_channel m_axi_dma_aw();
-axi_write_channel m_axi_dma_w();
+axi_write_channel #(
+	.AXI_WDATA_WIDTH(C_M_AXI_DMA_DATA_WIDTH)
+) m_axi_dma_w();
 axi_write_response_channel m_axi_dma_b();
+
 axi_read_address_channel m_axi_dma_ar();
-axi_read_channel m_axi_dma_r();
+axi_read_channel #(
+	.AXI_RDATA_WIDTH(C_M_AXI_DMA_DATA_WIDTH)
+) m_axi_dma_r();
+
 // AR
 // assign m_axi_arid = m_axi.arid;
 assign m_axi_dma_arvalid = m_axi_dma_ar.arvalid;
