@@ -16,8 +16,7 @@
 // AXI[r] -> FIFO
 module axi_to_fifo #
 (
-	parameter integer AXI_ADDR_WIDTH = 32,
-	parameter integer AXI_DATA_WIDTH = 32
+	parameter integer AXI_ADDR_WIDTH = 32
 )
 (
 	input wire clock,
@@ -33,6 +32,7 @@ module axi_to_fifo #
 	axi_read_channel.master axi_r
 );
 
+localparam int AXI_DATA_WIDTH = axi_r.AXI_RDATA_WIDTH;
 localparam int MAX_NBYTES_PER_BURST = 256 * (AXI_DATA_WIDTH / 8);
 localparam int LEN_WIDTH = 16;
 localparam int ALIGN_WIDTH = $clog2(AXI_DATA_WIDTH / 8);
@@ -111,6 +111,11 @@ always_ff @(posedge clock) begin
 				else
 					axi_ar.arlen <= beats_left - 1;
 			end
+			// Prepare these values here.
+			rlast_lt_full <= last_write_bytes[ALIGN_WIDTH] == 1'b0;
+			rlast_geq_full <= last_write_bytes[ALIGN_WIDTH] == 1'b1;
+			rlast_gt_full <= last_write_bytes[ALIGN_WIDTH] == 1'b1 &&
+				|last_write_bytes[ALIGN_WIDTH-1:0] != 1'b0;
 		end
 		else if (ar_hshake) begin
 			axi_ar.arvalid <= 1'b0;
@@ -159,17 +164,107 @@ always_ff @(posedge clock) begin
 	end
 end
 
+var logic [$bits(axi_r.rdata)-1:0] reordered_axi_rdata_comb;
+var logic [$bits(axi_r.rdata)-1:0] last_axi_rdata_comb;
+var logic [$bits(axi_r.rdata)-1:0] last_axi_rdata_ff;
+var logic [ALIGN_WIDTH-1:0] current_offset;
+
+always_comb begin
+	case (current_offset)
+	2'b00: begin
+		reordered_axi_rdata_comb = axi_r.rdata;
+		last_axi_rdata_comb = '0;
+	end
+	2'b01: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[23:16], axi_r.rdata[15:8], axi_r.rdata[7:0], 8'h00 };
+		last_axi_rdata_comb = { 8'h00, 8'h00, 8'h00, axi_r.rdata[31:24] };
+	end
+	2'b10: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[15:8], axi_r.rdata[7:0], 8'h00, 8'h00 };
+		last_axi_rdata_comb = { 8'h00, 8'h00, axi_r.rdata[31:24], axi_r.rdata[23:16] };
+	end
+	2'b11: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[7:0], 8'h00, 8'h00, 8'h00 };
+		last_axi_rdata_comb = { 8'h00, axi_r.rdata[31:24], axi_r.rdata[23:16], axi_r.rdata[15:8] };
+	end
+	endcase
+end
+
+var logic rlast_lt_full;
+var logic rlast_geq_full;
+var logic rlast_gt_full;
+// We keep this around to be able to detect the cycle just after the
+// last read beat.
+var logic extra_write;
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		fifo_w.wr_en <= 1'b0;
+		last_axi_rdata_ff <= '0;
+		extra_write <= 1'b0;
 	end
 	else begin
 		// Unpulse
 		fifo_w.wr_en <= 1'b0;
+		extra_write <= 1'b0;
 
 		if (r_hshake) begin
+			/* If this is the last beat and there are extra bytes,
+			 * and this is not the last transfer ('cont' set),
+			 * don't store it into the FIFO but rather keep the
+			 * extra bytes around.
+			 */
+
+			/* 
+			 * There are three cases to handle here.
+			 * The addition of the current offset and the number of extra bytes
+			 * results in:
+			 * 1) a less-than-full data word to write
+			 *   o) If 'cont' is set, don't write non-full data words to the FIFO.
+			 *   x) If 'cont' is not set, write the non-full data word to the FIFO.
+			 * 2) a full data word to write
+			 *   o) Whether or not cont is set, write the full data word to the FIFO.
+			 * 3) more than a full data word to write
+			 *   o) Whether or not cont is set, write the full data word to the FIFO
+			 *		and store the extra bytes.
+			 *   x) If 'cont' is not set, set 'extra_write' to write the remaining bytes
+			 *		in the next cycle.
+			 */
+
+			if (axi_r.rlast) begin
+				if (rlast_lt_full) begin
+					if (!cont) begin
+						fifo_w.wr_en <= 1'b1;
+						fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+						last_axi_rdata_ff <= '0;
+					end
+					else begin
+						last_axi_rdata_ff <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+					end
+				end
+				else if (rlast_geq_full && !rlast_gt_full) begin
+					fifo_w.wr_en <= 1'b1;
+					fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+					last_axi_rdata_ff <= '0;
+				end
+				else begin
+					fifo_w.wr_en <= 1'b1;
+					fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+					last_axi_rdata_ff <= last_axi_rdata_comb;
+					if (!cont) begin
+						extra_write <= 1'b1;
+					end
+				end
+			end
+			else begin
+				fifo_w.wr_en <= 1'b1;
+				fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+				last_axi_rdata_ff <= last_axi_rdata_comb;
+			end
+		end
+		if (extra_write) begin
 			fifo_w.wr_en <= 1'b1;
-			fifo_w.wr_data <= axi_r.rdata;
+			fifo_w.wr_data <= last_axi_rdata_ff;
+			last_axi_rdata_ff <= '0;
 		end
 	end
 end
@@ -182,15 +277,19 @@ end
 // Reading initiation pulse
 var logic read_burst_start;
 var logic [(LEN_WIDTH-8-ALIGN_WIDTH)-1:0] full_bursts_left;
-var logic [8-1:0] beats_left;
+var logic [7:0] beats_left;
 var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] src_addr;
+var logic cont;
+
+var logic [ALIGN_WIDTH:0] last_write_bytes;
 
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		read_burst_start <= 1'b0;
 		mem_r.done <= 1'b0;
 		mem_r.busy <= 1'b0;
+		current_offset <= '0;
 	end
 	else begin
 		// Unpulse
@@ -210,6 +309,13 @@ always_ff @(posedge clock) begin
 				full_bursts_left <= mem_r.len[LEN_WIDTH-1:8+ALIGN_WIDTH];
 				beats_left <= mem_r.len[8+ALIGN_WIDTH-1:ALIGN_WIDTH];
 				extra_bytes <= mem_r.len[ALIGN_WIDTH-1:0];
+				if (mem_r.len[ALIGN_WIDTH-1:0] == '0) begin
+					last_write_bytes[ALIGN_WIDTH] <= 1'b1;
+					last_write_bytes[ALIGN_WIDTH-1:0] <= current_offset;
+				end
+				else
+					last_write_bytes <= current_offset + mem_r.len[ALIGN_WIDTH-1:0];
+				cont <= mem_r.cont;
 				mem_r.busy <= 1'b1;
 				read_burst_start <= 1'b1;
 			end
@@ -229,6 +335,10 @@ always_ff @(posedge clock) begin
 				mem_r.error <= 1'b0;
 				mem_r.done <= 1'b1;
 				mem_r.busy <= 1'b0;
+				if (cont)
+					current_offset <= last_write_bytes[ALIGN_WIDTH-1:0];
+				else
+					current_offset <= '0;
 			end
 		end
 	end
