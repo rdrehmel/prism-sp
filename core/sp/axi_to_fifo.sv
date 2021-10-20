@@ -216,8 +216,6 @@ always_ff @(posedge clock) begin
 
 			/* 
 			 * There are three cases to handle here.
-			 * The addition of the current offset and the number of extra bytes
-			 * results in:
 			 * 1) a less-than-full data word to write
 			 *   o) If 'cont' is set, don't write non-full data words to the FIFO.
 			 *   x) If 'cont' is not set, write the non-full data word to the FIFO.
