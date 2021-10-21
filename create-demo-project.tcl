@@ -4,7 +4,8 @@ set ip_repo_base_path "$::env(IP_REPO_BASE_PATH)"
 
 start_gui
 
-create_project ${_xil_proj_name_} "./${_xil_proj_name_}" -part ${part}
+set proj_path ${_xil_proj_name_}
+create_project -part ${part} ${_xil_proj_name_} ${proj_path}
 
 # Set some essential properties.
 set_property -name "board_part" -value "xilinx.com:zcu102:part0:3.4" -objects [current_project]
@@ -19,9 +20,9 @@ update_ip_catalog -rebuild
 create_bd_design "design_1"
 
 # Make the wrapper (automatically updated by Vivado).
-make_wrapper -files [get_files "${proj_path}/${_xil_proj_name_}/${_xil_proj_name_}.srcs/sources_1/bd/design_1/design_1.bd"] -top
+make_wrapper -files [get_files "${proj_path}/${_xil_proj_name_}.srcs/sources_1/bd/design_1/design_1.bd"] -top
 # Add the wrapper.
-add_files -norecurse "${proj_path}/${_xil_proj_name_}/${_xil_proj_name_}.gen/sources_1/bd/design_1/hdl/design_1_wrapper.v"
+add_files -norecurse "${proj_path}/${_xil_proj_name_}.gen/sources_1/bd/design_1/hdl/design_1_wrapper.v"
 # Set the wrapper to be the top-level module.
 set_property -name "top" -value "design_1_wrapper" -objects [current_fileset]
 
