@@ -177,7 +177,7 @@ sp_rx_data_dma_status()
 {
 	uint32_t x;
 
-	EMIT_INSN_100(SP_FUNCT7_RX_DATA_DMA_START, x);
+	EMIT_INSN_100(SP_FUNCT7_RX_DATA_DMA_STATUS, x);
 	return x;
 }
 
@@ -223,7 +223,7 @@ static inline uint32_t
 sp_tx_data_dma_status()
 {
 	uint32_t x;
-	EMIT_INSN_100(SP_FUNCT7_TX_DATA_DMA_START, x);
+	EMIT_INSN_100(SP_FUNCT7_TX_DATA_DMA_STATUS, x);
 	return x;
 }
 
