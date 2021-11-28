@@ -169,6 +169,13 @@ var logic [$bits(axi_r.rdata)-1:0] last_axi_rdata_comb;
 var logic [$bits(axi_r.rdata)-1:0] last_axi_rdata_ff;
 var logic [ALIGN_WIDTH-1:0] current_offset;
 
+`ifdef NOTYET
+for (int i = 0; i < AXI_DATA_WIDTH / 8; i++) begin
+	reordered_axi_rdata_comb[i*8 +:8]
+end
+`endif
+
+if (AXI_DATA_WIDTH == 32) begin
 always_comb begin
 	case (current_offset)
 	2'b00: begin
@@ -176,18 +183,127 @@ always_comb begin
 		last_axi_rdata_comb = '0;
 	end
 	2'b01: begin
-		reordered_axi_rdata_comb = { axi_r.rdata[23:16], axi_r.rdata[15:8], axi_r.rdata[7:0], 8'h00 };
-		last_axi_rdata_comb = { 8'h00, 8'h00, 8'h00, axi_r.rdata[31:24] };
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:3*8], last_axi_rdata_ff[0 +:1*8] };
+		last_axi_rdata_comb = { {3*8{1'b0}}, axi_r.rdata[3*8 +:1*8] };
 	end
 	2'b10: begin
-		reordered_axi_rdata_comb = { axi_r.rdata[15:8], axi_r.rdata[7:0], 8'h00, 8'h00 };
-		last_axi_rdata_comb = { 8'h00, 8'h00, axi_r.rdata[31:24], axi_r.rdata[23:16] };
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:2*8], last_axi_rdata_ff[0 +:2*8] };
+		last_axi_rdata_comb = { {2*8{1'b0}}, axi_r.rdata[2*8 +:2*8] };
 	end
 	2'b11: begin
-		reordered_axi_rdata_comb = { axi_r.rdata[7:0], 8'h00, 8'h00, 8'h00 };
-		last_axi_rdata_comb = { 8'h00, axi_r.rdata[31:24], axi_r.rdata[23:16], axi_r.rdata[15:8] };
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:1*8], last_axi_rdata_ff[0 +:3*8] };
+		last_axi_rdata_comb = { {1*8{1'b0}}, axi_r.rdata[1*8 +:3*8] };
 	end
 	endcase
+end
+end
+else if (AXI_DATA_WIDTH == 64) begin
+always_comb begin
+	case (current_offset)
+	3'b000: begin
+		reordered_axi_rdata_comb = axi_r.rdata;
+		last_axi_rdata_comb = '0;
+	end
+	3'b001: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:7*8], last_axi_rdata_ff[0 +:1*8] };
+		last_axi_rdata_comb = { {7*8{1'b0}}, axi_r.rdata[7*8 +:1*8] };
+	end
+	3'b010: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:6*8], last_axi_rdata_ff[0 +:2*8] };
+		last_axi_rdata_comb = { {6*8{1'b0}}, axi_r.rdata[6*8 +:2*8] };
+	end
+	3'b011: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:5*8], last_axi_rdata_ff[0 +:3*8] };
+		last_axi_rdata_comb = { {5*8{1'b0}}, axi_r.rdata[5*8 +:3*8] };
+	end
+	3'b100: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:4*8], last_axi_rdata_ff[0 +:4*8] };
+		last_axi_rdata_comb = { {4*8{1'b0}}, axi_r.rdata[4*8 +:4*8] };
+	end
+	3'b101: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:3*8], last_axi_rdata_ff[0 +:5*8] };
+		last_axi_rdata_comb = { {3*8{1'b0}}, axi_r.rdata[3*8 +:5*8] };
+	end
+	3'b110: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:2*8], last_axi_rdata_ff[0 +:6*8] };
+		last_axi_rdata_comb = { {2*8{1'b0}}, axi_r.rdata[2*8 +:6*8] };
+	end
+	3'b111: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:1*8], last_axi_rdata_ff[0 +:7*8] };
+		last_axi_rdata_comb = { {1*8{1'b0}}, axi_r.rdata[1*8 +:7*8] };
+	end
+	endcase
+end
+end
+else if (AXI_DATA_WIDTH == 128) begin
+always_comb begin
+	case (current_offset)
+	4'b0000: begin
+		reordered_axi_rdata_comb = axi_r.rdata;
+		last_axi_rdata_comb = '0;
+	end
+	4'b0001: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:15*8], last_axi_rdata_ff[0 +:1*8] };
+		last_axi_rdata_comb = { {15*8{1'b0}}, axi_r.rdata[15*8 +:1*8] };
+	end
+	4'b0010: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:14*8], last_axi_rdata_ff[0 +:2*8] };
+		last_axi_rdata_comb = { {14*8{1'b0}}, axi_r.rdata[14*8 +:2*8] };
+	end
+	4'b0011: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:13*8], last_axi_rdata_ff[0 +:3*8] };
+		last_axi_rdata_comb = { {13*8{1'b0}}, axi_r.rdata[13*8 +:3*8] };
+	end
+	4'b0100: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:12*8], last_axi_rdata_ff[0 +:4*8] };
+		last_axi_rdata_comb = { {12*8{1'b0}}, axi_r.rdata[12*8 +:4*8] };
+	end
+	4'b0101: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:11*8], last_axi_rdata_ff[0 +:5*8] };
+		last_axi_rdata_comb = { {11*8{1'b0}}, axi_r.rdata[11*8 +:5*8] };
+	end
+	4'b0110: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:10*8], last_axi_rdata_ff[0 +:6*8] };
+		last_axi_rdata_comb = { {10*8{1'b0}}, axi_r.rdata[10*8 +:6*8] };
+	end
+	4'b0111: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:9*8], last_axi_rdata_ff[0 +:7*8] };
+		last_axi_rdata_comb = { {9*8{1'b0}}, axi_r.rdata[9*8 +:7*8] };
+	end
+	4'b1000: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:8*8], last_axi_rdata_ff[0 +:8*8] };
+		last_axi_rdata_comb = { {8*8{1'b0}}, axi_r.rdata[8*8 +:8*8] };
+	end
+	4'b1001: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:7*8], last_axi_rdata_ff[0 +:9*8] };
+		last_axi_rdata_comb = { {7*8{1'b0}}, axi_r.rdata[7*8 +:9*8] };
+	end
+	4'b1010: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:6*8], last_axi_rdata_ff[0 +:10*8] };
+		last_axi_rdata_comb = { {6*8{1'b0}}, axi_r.rdata[6*8 +:10*8] };
+	end
+	4'b1011: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:5*8], last_axi_rdata_ff[0 +:11*8] };
+		last_axi_rdata_comb = { {5*8{1'b0}}, axi_r.rdata[5*8 +:11*8] };
+	end
+	4'b1100: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:4*8], last_axi_rdata_ff[0 +:12*8] };
+		last_axi_rdata_comb = { {4*8{1'b0}}, axi_r.rdata[4*8 +:12*8] };
+	end
+	4'b1101: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:3*8], last_axi_rdata_ff[0 +:13*8] };
+		last_axi_rdata_comb = { {3*8{1'b0}}, axi_r.rdata[3*8 +:13*8] };
+	end
+	4'b1110: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:2*8], last_axi_rdata_ff[0 +:14*8] };
+		last_axi_rdata_comb = { {2*8{1'b0}}, axi_r.rdata[2*8 +:14*8] };
+	end
+	4'b1111: begin
+		reordered_axi_rdata_comb = { axi_r.rdata[0 +:1*8], last_axi_rdata_ff[0 +:15*8] };
+		last_axi_rdata_comb = { {1*8{1'b0}}, axi_r.rdata[1*8 +:15*8] };
+	end
+	endcase
+end
 end
 
 var logic rlast_lt_full;
@@ -232,21 +348,21 @@ always_ff @(posedge clock) begin
 				if (rlast_lt_full) begin
 					if (!cont) begin
 						fifo_w.wr_en <= 1'b1;
-						fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+						fifo_w.wr_data <= reordered_axi_rdata_comb;
 						last_axi_rdata_ff <= '0;
 					end
 					else begin
-						last_axi_rdata_ff <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+						last_axi_rdata_ff <= reordered_axi_rdata_comb;
 					end
 				end
 				else if (rlast_geq_full && !rlast_gt_full) begin
 					fifo_w.wr_en <= 1'b1;
-					fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+					fifo_w.wr_data <= reordered_axi_rdata_comb;
 					last_axi_rdata_ff <= '0;
 				end
 				else begin
 					fifo_w.wr_en <= 1'b1;
-					fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+					fifo_w.wr_data <= reordered_axi_rdata_comb;
 					last_axi_rdata_ff <= last_axi_rdata_comb;
 					if (!cont) begin
 						extra_write <= 1'b1;
@@ -255,7 +371,7 @@ always_ff @(posedge clock) begin
 			end
 			else begin
 				fifo_w.wr_en <= 1'b1;
-				fifo_w.wr_data <= last_axi_rdata_ff | reordered_axi_rdata_comb;
+				fifo_w.wr_data <= reordered_axi_rdata_comb;
 				last_axi_rdata_ff <= last_axi_rdata_comb;
 			end
 		end
