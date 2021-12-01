@@ -540,7 +540,7 @@ always_comb begin
 		cmds_busy_comb[CMD_TX_DATA_DMA_STATUS] = 1'b0;
 	end
 	else begin
-		if (issue.new_request & issue.ready & issue_cmd[CMD_RX_DATA_DMA_STATUS]) begin
+		if (issue.new_request & issue.ready & issue_cmd[CMD_TX_DATA_DMA_STATUS]) begin
 			cmds_done_comb[CMD_TX_DATA_DMA_STATUS] = 1'b1;
 			cmds_busy_comb[CMD_TX_DATA_DMA_STATUS] = 1'b1;
 		end
