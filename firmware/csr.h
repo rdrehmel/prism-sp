@@ -23,11 +23,11 @@ static inline uint64_t csr_read_cycle()
 	// "10.1 Base Counters and Timers"
 	uint32_t x, y, z;
 	asm volatile (
-		"csr_read_cycle_again:\n"
+		"csr_read_cycle_again_%=:\n"
 		"		rdcycleh	%0\n"
 		"		rdcycle		%1\n"
 		"		rdcycleh	%2\n"
-		"       bne			%0, %2, csr_read_cycle_again\n" 
+		"       bne			%0, %2, csr_read_cycle_again_%=\n" 
 		: "=r" (x), "=r" (y), "=r" (z)
 		: 
 		: 
@@ -42,11 +42,11 @@ static inline uint64_t csr_read_time()
 	// "10.1 Base Counters and Timers"
 	uint32_t x, y, z;
 	asm volatile (
-		"csr_read_time_again:\n"
+		"csr_read_time_again_%=:\n"
 		"		rdtimeh		%0\n"
 		"		rdtime		%1\n"
 		"		rdtimeh		%2\n"
-		"       bne			%0, %2, csr_read_time_again\n" 
+		"       bne			%0, %2, csr_read_time_again_%=\n" 
 		: "=r" (x), "=r" (y), "=r" (z)
 		: 
 		: 
@@ -61,11 +61,11 @@ static inline uint64_t csr_read_instret()
 	// "10.1 Base Counters and Timers"
 	uint32_t x, y, z;
 	asm volatile (
-		"csr_read_instret_again:\n"
+		"csr_read_instret_again_%=:\n"
 		"		rdinstret		%0\n"
 		"		rdinstret		%1\n"
 		"		rdinstret		%2\n"
-		"       bne			%0, %2, csr_read_instret_again\n" 
+		"       bne			%0, %2, csr_read_instret_again_%=\n" 
 		: "=r" (x), "=r" (y), "=r" (z)
 		: 
 		: 
