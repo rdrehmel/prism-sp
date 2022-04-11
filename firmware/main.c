@@ -36,8 +36,8 @@ struct gem_queue {
 	gem_tx_dma_desc_type *cur_tx_dma_desc_addr;
 } queues[NQUEUES];
 
-void rx();
-void tx();
+void rx(int);
+int tx(int);
 
 uint32_t
 gem_read_reg(const volatile void *base, int offset)
@@ -193,15 +193,14 @@ dump_tx_descs(int q)
 /*
  * Called when triggered by MMIO.
  */
-void
+int
 tx(int q)
 {
 	struct gem_queue *queue = &queues[q];
-	int ntxdescs = 0;
-
 	gem_tx_dma_desc_type *packet_dma_descp;
 	gem_tx_dma_desc_type packet_dma_desc_1;
 	int packet_length = 0;
+	int ntxdescs = 0;
 	bool no_crc;
 
 	for (;;) {
@@ -216,6 +215,7 @@ tx(int q)
 #endif
 			break;
 		}
+		ntxdescs++;
 
 		// If this is the first descriptor of this packet.
 		if (packet_length == 0) {
@@ -236,6 +236,12 @@ tx(int q)
 #endif
 
 		bool eof = (dma_desc_1 & (1 << GEM_TX_DD1_EOF_BITN)) != 0;
+		uint32_t count;
+		for (;;) {
+			count = sp_tx_data_count();
+			if (((1 << 16)/8 - count) >= data_length)
+				break;
+		}
 		sp_tx_data_dma_start(data_addr, (uint32_t)!eof << 31 | data_length);
 		for (;;) {
 			uint32_t status = sp_tx_data_dma_status();
@@ -269,10 +275,16 @@ tx(int q)
 			break;
 		}
 
-		ntxdescs++;
 	}
-	// Send TX done interrupt
-	gem_tx_done(q);
+	if (ntxdescs > 0) {
+		// Send TX done interrupt
+		gem_tx_done(q);
+	}
+
+	// Retval:
+	// 0  : No more descriptors
+	// >=1: Possibly more descriptors
+	return ntxdescs;
 }
 
 extern void uart_init();
@@ -280,7 +292,9 @@ extern void uart_init();
 void
 start()
 {
+	const int ALL_QUEUE_BITS = (1 << NQUEUES) - 1;
 	uint32_t x;
+	int do_tx = 0;
 
 	for (;;) {
 		x = sp_rx_meta_empty();
@@ -289,11 +303,18 @@ start()
 			rx(0);
 		}
 
-		x = sp_load_reg(SP_REGN_CONTROL);
-		if (x & (1 << SP_CONTROL_START_TX_BITN)) {
-			sp_store_reg(SP_REGN_CONTROL, x ^ (1 << SP_CONTROL_START_TX_BITN));
-			for (int q = 0; q < NQUEUES; q++) {
-				tx(q);
+		if (do_tx != ALL_QUEUE_BITS) {
+			x = sp_load_reg(SP_REGN_CONTROL);
+			if (x & (1 << SP_CONTROL_START_TX_BITN)) {
+				sp_store_reg(SP_REGN_CONTROL, x ^ (1 << SP_CONTROL_START_TX_BITN));
+				do_tx = ALL_QUEUE_BITS;
+			}
+		}
+		for (int q = 0; q < NQUEUES; q++) {
+			if (do_tx & (1 << q)) {
+				if (tx(q) == 0) {
+					do_tx ^= 1 << q;
+				}
 			}
 		}
 	}
@@ -307,7 +328,7 @@ main()
 	uart_init();
 
 	printf("----\n");
-	printf("GEM Interface firmware version 0.3\n");
+	printf("GEM Interface firmware version 0.53:main\n");
 	printf("----\n");
 	printf("Waiting for start signal.\n");
 
