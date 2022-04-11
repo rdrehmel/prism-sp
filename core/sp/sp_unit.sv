@@ -88,9 +88,10 @@ typedef enum logic [4:0] {
 	SP_FUNC7_TX_META_NFREE		= 5'b01000,
 	SP_FUNC7_TX_META_PUSH		= 5'b01001,
 	SP_FUNC7_TX_META_FULL		= 5'b01010,
-	SP_FUNC7_TX_DATA_SKIP		= 5'b01100,
-	SP_FUNC7_TX_DATA_DMA_START	= 5'b01101,
-	SP_FUNC7_TX_DATA_DMA_STATUS	= 5'b01110,
+	SP_FUNC7_TX_DATA_COUNT		= 5'b01100,
+	SP_FUNC7_TX_DATA_SKIP		= 5'b01101,
+	SP_FUNC7_TX_DATA_DMA_START	= 5'b01110,
+	SP_FUNC7_TX_DATA_DMA_STATUS	= 5'b01111,
 
 	SP_FUNC7_LOAD_REG			= 5'b10000,
 	SP_FUNC7_STORE_REG			= 5'b10001,
@@ -107,7 +108,8 @@ localparam int CMD_RX_DATA_DMA_STATUS	= CMD_RX_DATA_DMA_START + 1;
 localparam int CMD_TX_META_NFREE		= CMD_RX_DATA_DMA_STATUS + 1;
 localparam int CMD_TX_META_PUSH			= CMD_TX_META_NFREE + 1;
 localparam int CMD_TX_META_FULL			= CMD_TX_META_PUSH + 1;
-localparam int CMD_TX_DATA_SKIP			= CMD_TX_META_FULL + 1;
+localparam int CMD_TX_DATA_COUNT		= CMD_TX_META_FULL + 1;
+localparam int CMD_TX_DATA_SKIP			= CMD_TX_DATA_COUNT + 1;
 localparam int CMD_TX_DATA_DMA_START	= CMD_TX_DATA_SKIP + 1;
 localparam int CMD_TX_DATA_DMA_STATUS	= CMD_TX_DATA_DMA_START + 1;
 
@@ -224,6 +226,7 @@ always_comb begin
 	//SP_FUNC7_TX_META_NFREE: issue_cmd[CMD_TX_META_NFREE] = 1'b1;
 	SP_FUNC7_TX_META_PUSH: issue_cmd[CMD_TX_META_PUSH] = 1'b1;
 	SP_FUNC7_TX_META_FULL: issue_cmd[CMD_TX_META_FULL] = 1'b1;
+	SP_FUNC7_TX_DATA_COUNT: issue_cmd[CMD_TX_DATA_COUNT] = 1'b1;
 	SP_FUNC7_TX_DATA_DMA_START: issue_cmd[CMD_TX_DATA_DMA_START] = 1'b1;
 	SP_FUNC7_TX_DATA_DMA_STATUS: issue_cmd[CMD_TX_DATA_DMA_STATUS] = 1'b1;
 	SP_FUNC7_STORE_REG: issue_cmd[CMD_STORE_REG] = 1'b1;
@@ -486,6 +489,44 @@ always_ff @(posedge clk) begin
 end
 
 /*
+ * Command "TX DATA COUNT"
+ */
+always_comb begin
+	cmds_done_comb[CMD_TX_DATA_COUNT] = cmds_done_ff[CMD_TX_DATA_COUNT];
+	cmds_busy_comb[CMD_TX_DATA_COUNT] = cmds_busy_ff[CMD_TX_DATA_COUNT];
+
+	if (rst) begin
+		cmds_done_comb[CMD_TX_DATA_COUNT] = 1'b0;
+		cmds_busy_comb[CMD_TX_DATA_COUNT] = 1'b0;
+	end
+	else begin
+		if (issue.new_request & issue.ready & issue_cmd[CMD_TX_DATA_COUNT]) begin
+			cmds_done_comb[CMD_TX_DATA_COUNT] = 1'b1;
+			cmds_busy_comb[CMD_TX_DATA_COUNT] = 1'b1;
+		end
+		if (cmds_done_ff[CMD_TX_DATA_COUNT] & wb.ack) begin
+			cmds_done_comb[CMD_TX_DATA_COUNT] = 1'b0;
+			cmds_busy_comb[CMD_TX_DATA_COUNT] = 1'b0;
+		end
+	end
+end
+
+var logic [$bits(tx_data_fifo_w_wr_data_count)+$clog2(TX_DATA_FIFO_WIDTH/8)-1:0] tx_data_count_result_ff;
+
+always_ff @(posedge clk) begin
+	cmds_done_ff[CMD_TX_DATA_COUNT] <= cmds_done_comb[CMD_TX_DATA_COUNT];
+	cmds_busy_ff[CMD_TX_DATA_COUNT] <= cmds_busy_comb[CMD_TX_DATA_COUNT];
+
+	if (rst) begin
+	end
+	else begin
+		if (issue.new_request & issue.ready & issue_cmd[CMD_TX_DATA_COUNT]) begin
+			tx_data_count_result_ff <= 32'({ tx_data_fifo_w_wr_data_count, {($clog2(TX_DATA_FIFO_WIDTH/8)){1'b0}} });
+		end
+	end
+end
+
+/*
  * Command "TX DATA DMA START"
  */
 always_comb begin
@@ -719,9 +760,9 @@ always_comb begin
 	cur_cmd[CMD_RX_META_POP]: result = rx_meta_fifo_read_rd_data;
 	cur_cmd[CMD_RX_META_EMPTY]: result[0] = rx_meta_fifo_r.empty;
 	cur_cmd[CMD_RX_DATA_DMA_STATUS]: result[0] = rx_data_dma_status_result_ff;
-
 	//cur_cmd[CMD_TX_META_NFREE]: result = 32'(tx_meta_nfree_comb);
 	cur_cmd[CMD_TX_META_FULL]: result[0] = tx_meta_fifo_w.full;
+	cur_cmd[CMD_TX_DATA_COUNT]: result = 31'(tx_data_count_result_ff);
 	cur_cmd[CMD_TX_DATA_DMA_STATUS]: result[0] = tx_data_dma_status_result_ff;
 	cur_cmd[CMD_LOAD_REG]: result = load_reg_cur;
 	endcase
@@ -877,9 +918,12 @@ assign gem.tx_r_underflow = 1'b0;
 
 var logic [TX_DATA_FIFO_WIDTH-1:0] tx_cur_buf;
 var logic [(TX_DATA_FIFO_WIDTH/8)-1:0] tx_cur_buf_valid;
+var logic tx_last_byte_ff;
 
 always_ff @(posedge gem.tx_clock) begin
 	tx_packet_byte_count_ff <= tx_packet_byte_count_comb;
+	// This is just "tx_last_byte_ff = tx_packet_byte_count_ff == 1;"
+	tx_last_byte_ff = ~|tx_packet_byte_count_ff[$bits(tx_packet_byte_count_ff)-1:1] & tx_packet_byte_count_ff[0];
 
 	if (!gem.tx_resetn) begin
 	end
@@ -922,7 +966,7 @@ always_ff @(posedge gem.tx_clock) begin
 				begin
 					tx_cur_buf <= tx_data_fifo_r.rd_data;
 					tx_cur_buf_valid <= '1;
-					tx_data_fifo_r.rd_en <= 1'b1;
+					tx_data_fifo_r.rd_en <= ~tx_last_byte_ff;
 				end
 				else begin
 					// Shift the TX buffer right by 8 bits.
@@ -937,7 +981,7 @@ always_ff @(posedge gem.tx_clock) begin
 				// here.
 				gem.tx_r_sop <= gem.tx_r_data_rdy;
 
-				if (tx_packet_byte_count_comb == '0) begin
+				if (tx_last_byte_ff) begin
 					gem.tx_r_eop <= 1'b1;
 					tx_state <= 1'b0;
 				end
@@ -991,7 +1035,8 @@ xpm_fifo_async #(
 	//.WR_DATA_COUNT_WIDTH(RX_META_FIFO_WR_DATA_COUNT_WIDTH)
 	.WR_DATA_COUNT_WIDTH(1)
 ) rx_meta_fifo (
-	.rst(rst),
+	// reset is synchronized to wr_clk!
+	.rst(~gem.rx_resetn),
 
 	.rd_clk(clk),
 	.rd_en(rx_meta_fifo_r.rd_en),
@@ -1043,10 +1088,11 @@ xpm_fifo_async #(
 	.WAKEUP_TIME(0),
 	.WRITE_DATA_WIDTH(RX_DATA_FIFO_WIDTH),
 	// GEM RX clock domain
-	//.WR_DATA_COUNT_WIDTH(1)
-	.WR_DATA_COUNT_WIDTH(RX_DATA_FIFO_WR_DATA_COUNT_WIDTH)
+	.WR_DATA_COUNT_WIDTH(1)
+	//.WR_DATA_COUNT_WIDTH(RX_DATA_FIFO_WR_DATA_COUNT_WIDTH)
 ) rx_data_fifo (
-	.rst(rst),
+	// reset is synchronized to wr_clk!
+	.rst(~gem.rx_resetn),
 
 	.wr_clk(gem.rx_clock),
 	.wr_en(rx_data_fifo_w.wr_en),
@@ -1081,7 +1127,7 @@ xpm_fifo_async #(
 	// Processor clock domain
 	.WR_DATA_COUNT_WIDTH(TX_META_FIFO_WR_DATA_COUNT_WIDTH)
 ) tx_meta_fifo (
-	// XXX sure? or do we need a reset in the GEM TX clock domain?
+	// reset is synchronized to wr_clk!
 	.rst(rst),
 
 	.rd_clk(gem.tx_clock),
@@ -1089,6 +1135,7 @@ xpm_fifo_async #(
 	.dout(tx_meta_fifo_r.rd_data),
 	.empty(tx_meta_fifo_r.empty),
 	.rd_data_count(tx_meta_fifo_r_rd_data_count), 
+
 	.wr_clk(clk),
 	.wr_en(tx_meta_fifo_w.wr_en),
 	.din(tx_meta_fifo_w.wr_data),
@@ -1118,7 +1165,7 @@ xpm_fifo_async #(
 	// Processor clock domain
 	.WR_DATA_COUNT_WIDTH(TX_DATA_FIFO_WR_DATA_COUNT_WIDTH)
 ) tx_data_fifo (
-	// XXX sure? or do we need a reset in the GEM TX clock domain?
+	// reset is synchronized to wr_clk!
 	.rst(rst),
 
 	.wr_clk(clk),
