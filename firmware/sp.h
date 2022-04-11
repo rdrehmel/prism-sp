@@ -32,9 +32,10 @@
 #define SP_FUNCT7_TX_META_NFREE			"0x8"
 #define SP_FUNCT7_TX_META_PUSH			"0x9"
 #define SP_FUNCT7_TX_META_FULL			"0xa"
-#define SP_FUNCT7_TX_DATA_SKIP			"0xc"
-#define SP_FUNCT7_TX_DATA_DMA_START		"0xd"
-#define SP_FUNCT7_TX_DATA_DMA_STATUS	"0xe"
+#define SP_FUNCT7_TX_DATA_COUNT			"0xc"
+#define SP_FUNCT7_TX_DATA_SKIP			"0xd"
+#define SP_FUNCT7_TX_DATA_DMA_START		"0xe"
+#define SP_FUNCT7_TX_DATA_DMA_STATUS	"0xf"
 
 #define SP_FUNCT7_LOAD_REG				"0x10"
 #define SP_FUNCT7_STORE_REG				"0x11"
@@ -207,6 +208,14 @@ sp_tx_meta_full()
 
 	EMIT_INSN_100(SP_FUNCT7_TX_META_FULL, x);
 	return (bool)x;
+}
+
+static inline uint32_t
+sp_tx_data_count(void)
+{
+	uint32_t x;
+	EMIT_INSN_100(SP_FUNCT7_TX_DATA_COUNT, x);
+	return x;
 }
 
 /*
