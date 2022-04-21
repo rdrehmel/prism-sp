@@ -19,8 +19,8 @@ module axi_to_fifo #
 	parameter integer AXI_ADDR_WIDTH = 32
 )
 (
-	input wire clock,
-	input wire reset_n,
+	input wire logic clock,
+	input wire logic reset_n,
 
 	// Interface to start the memory reading process
 	memory_read_interface.slave mem_r,
@@ -113,7 +113,6 @@ always_ff @(posedge clock) begin
 			end
 			// Prepare these values here.
 			rlast_lt_full <= last_write_bytes[ALIGN_WIDTH] == 1'b0;
-			rlast_geq_full <= last_write_bytes[ALIGN_WIDTH] == 1'b1;
 			rlast_gt_full <= last_write_bytes[ALIGN_WIDTH] == 1'b1 &&
 				|last_write_bytes[ALIGN_WIDTH-1:0] != 1'b0;
 		end
@@ -307,7 +306,6 @@ end
 end
 
 var logic rlast_lt_full;
-var logic rlast_geq_full;
 var logic rlast_gt_full;
 // We keep this around to be able to detect the cycle just after the
 // last read beat.
@@ -315,7 +313,6 @@ var logic extra_write;
 always_ff @(posedge clock) begin
 	if (!reset_n) begin
 		fifo_w.wr_en <= 1'b0;
-		last_axi_rdata_ff <= '0;
 		extra_write <= 1'b0;
 	end
 	else begin
@@ -324,12 +321,6 @@ always_ff @(posedge clock) begin
 		extra_write <= 1'b0;
 
 		if (r_hshake) begin
-			/* If this is the last beat and there are extra bytes,
-			 * and this is not the last transfer ('cont' set),
-			 * don't store it into the FIFO but rather keep the
-			 * extra bytes around.
-			 */
-
 			/* 
 			 * There are three cases to handle here.
 			 * 1) a less-than-full data word to write
@@ -343,42 +334,25 @@ always_ff @(posedge clock) begin
 			 *   x) If 'cont' is not set, set 'extra_write' to write the remaining bytes
 			 *		in the next cycle.
 			 */
-
-			if (axi_r.rlast) begin
-				if (rlast_lt_full) begin
-					if (!cont) begin
-						fifo_w.wr_en <= 1'b1;
-						fifo_w.wr_data <= reordered_axi_rdata_comb;
-						last_axi_rdata_ff <= '0;
-					end
-					else begin
-						last_axi_rdata_ff <= reordered_axi_rdata_comb;
-					end
-				end
-				else if (rlast_geq_full && !rlast_gt_full) begin
-					fifo_w.wr_en <= 1'b1;
-					fifo_w.wr_data <= reordered_axi_rdata_comb;
-					last_axi_rdata_ff <= '0;
-				end
-				else begin
-					fifo_w.wr_en <= 1'b1;
-					fifo_w.wr_data <= reordered_axi_rdata_comb;
-					last_axi_rdata_ff <= last_axi_rdata_comb;
-					if (!cont) begin
-						extra_write <= 1'b1;
-					end
-				end
+			if (axi_r.rlast & rlast_lt_full & cont) begin
+				last_axi_rdata_ff <= reordered_axi_rdata_comb;
 			end
 			else begin
 				fifo_w.wr_en <= 1'b1;
 				fifo_w.wr_data <= reordered_axi_rdata_comb;
 				last_axi_rdata_ff <= last_axi_rdata_comb;
 			end
+			// If
+			// - this is the last transfer,
+			// - more than a full word is available,
+			// - this is the last transaction, and
+			// - cont is not set,
+			// do an extra write cycle.
+			extra_write <= axi_r.rlast & rlast_gt_full & (bursts_left == 1) & ~cont;
 		end
 		if (extra_write) begin
 			fifo_w.wr_en <= 1'b1;
 			fifo_w.wr_data <= last_axi_rdata_ff;
-			last_axi_rdata_ff <= '0;
 		end
 	end
 end
@@ -391,6 +365,7 @@ end
 // Reading initiation pulse
 var logic read_burst_start;
 var logic [(LEN_WIDTH-8-ALIGN_WIDTH)-1:0] full_bursts_left;
+var logic [LEN_WIDTH-8-ALIGN_WIDTH:0] bursts_left;
 var logic [7:0] beats_left;
 var logic [ALIGN_WIDTH-1:0] extra_bytes;
 var logic [AXI_ADDR_WIDTH-1:0] src_addr;
@@ -421,6 +396,14 @@ always_ff @(posedge clock) begin
 			else begin
 				src_addr <= mem_r.addr;
 				full_bursts_left <= mem_r.len[LEN_WIDTH-1:8+ALIGN_WIDTH];
+
+				if (mem_r.len[8+ALIGN_WIDTH-1:0] != '0) begin
+					bursts_left <= mem_r.len[LEN_WIDTH-1:8+ALIGN_WIDTH] + 1;
+				end
+				else begin
+					bursts_left <= mem_r.len[LEN_WIDTH-1:8+ALIGN_WIDTH];
+				end
+
 				beats_left <= mem_r.len[8+ALIGN_WIDTH-1:ALIGN_WIDTH];
 				extra_bytes <= mem_r.len[ALIGN_WIDTH-1:0];
 				if (mem_r.len[ALIGN_WIDTH-1:0] == '0) begin
@@ -438,11 +421,10 @@ always_ff @(posedge clock) begin
 		if (mem_r.busy == 1'b1 && read_burst_done) begin
 			$display("read_burst_done pulse");
 
-			if (full_bursts_left > 1 ||
-				(full_bursts_left == 1 && |{beats_left,extra_bytes}))
-			begin
+			if (bursts_left != 1) begin
 				src_addr <= src_addr + MAX_NBYTES_PER_BURST[AXI_ADDR_WIDTH-1:0];
 				full_bursts_left <= full_bursts_left - 1;
+				bursts_left <= bursts_left - 1;
 				read_burst_start <= 1'b1;
 			end
 			else begin
