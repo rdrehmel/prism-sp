@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,24 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "csr.h"
 #include "sp.h"
 #include "gem.h"
 
+#ifndef UINT32_MIN
+#define UINT32_MIN		0x00000000
+#endif
+#ifndef UINT32_MAX
+#define UINT32_MAX		0xffffffff
+#endif
+
 #define NQUEUES					2
-//#define DEBUG
+#define DEBUG
+//#define DMA_PROF_TX
+//#define DMA_PROF_RX
+#define DMA_PROF_MIN_PACKET_SIZE	60
+#define DMA_PROF_MAX_PACKET_SIZE	1500
+#define DMA_PROF_NSAMPLES			10000
 
 typedef uint32_t gem_rx_dma_desc_type;
 typedef uint32_t gem_tx_dma_desc_type;
@@ -36,8 +49,64 @@ struct gem_queue {
 	gem_tx_dma_desc_type *cur_tx_dma_desc_addr;
 } queues[NQUEUES];
 
+struct sp_config {
+	int rx_data_fifo_size;
+	int rx_data_fifo_width;
+	int tx_data_fifo_size;
+	int tx_data_fifo_width;
+} config;
+
 void rx(int);
 int tx(int);
+
+#if defined(DMA_PROF_RX) || defined(DMA_PROF_TX)
+struct dma_prof_result {
+	uint32_t min;
+	uint32_t max;
+	uint64_t total;
+	float avg;
+};
+#endif
+#ifdef DMA_PROF_RX
+int dma_prof_rx_cur_packet_size = DMA_PROF_MIN_PACKET_SIZE;
+int dma_prof_rx_cur_samplen = 0;
+struct dma_prof_result dma_prof_result_rx;
+#endif
+#ifdef DMA_PROF_TX
+int dma_prof_tx_cur_packet_size = DMA_PROF_MIN_PACKET_SIZE;
+int dma_prof_tx_cur_samplen = 0;
+struct dma_prof_result dma_prof_result_tx;
+#endif
+
+#if defined(DMA_PROF_RX) || defined(DMA_PROF_TX)
+void
+dma_prof_result_reset(struct dma_prof_result *result)
+{
+	result->min = UINT32_MAX;
+	result->max = UINT32_MIN;
+	result->total = 0;
+	result->avg;
+}
+void
+dma_prof_result_eval(struct dma_prof_result *result, uint32_t x)
+{
+	if (result->min > x)
+		result->min = x;
+	if (result->max < x)
+		result->max = x;
+	result->total += x;
+}
+void
+dma_prof_result_eval_final(struct dma_prof_result *result)
+{
+	result->avg = (float)result->total / DMA_PROF_NSAMPLES;
+}
+void
+dma_prof_result_print(struct dma_prof_result *result)
+{
+	printf("%d %d %0.10f\n", result->min, result->max, result->avg);
+}
+#endif
 
 uint32_t
 gem_read_reg(const volatile void *base, int offset)
@@ -101,7 +170,19 @@ void
 rx(int q)
 {
 	struct gem_queue *queue = &queues[q];
-	int nrxdescs = 0;
+
+	// Get next descriptor from DRAM
+	gem_rx_dma_desc_type *dma_descp = queue->cur_rx_dma_desc_addr;
+	gem_rx_dma_desc_type dma_desc_0 = *(dma_descp + 0);
+	if (dma_desc_0 & (1 << GEM_RX_DD0_VALID_BITN)) {
+		//printf("RX: There are no free descriptors!\n");
+		return;
+	}
+	// XXX We currently only support 32-bit addresses.
+#ifdef GEM_64BIT_DESC
+	gem_rx_dma_desc_type dma_desc_0msb = *(dma_descp + 2);
+#endif
+	gem_rx_dma_desc_type dma_desc_1 = *(dma_descp + 1);
 
 	// Get meta information from BRAM
 	gem_rx_meta_desc_type meta_desc = sp_rx_meta_pop_uint32();
@@ -113,19 +194,6 @@ rx(int q)
 	// ...
 	// Could skip, could modify.
 
-	// Get next descriptor from DRAM
-	gem_rx_dma_desc_type *dma_descp = queue->cur_rx_dma_desc_addr;
-	gem_rx_dma_desc_type dma_desc_0 = *(dma_descp + 0);
-	gem_rx_dma_desc_type dma_desc_1 = *(dma_descp + 1);
-	// XXX We currently only support 32-bit addresses.
-#ifdef GEM_64BIT_DESC
-	gem_rx_dma_desc_type dma_desc_0msb = *(dma_descp + 2);
-#endif
-	if (dma_desc_0 & (1 << GEM_RX_DD0_VALID_BITN)) {
-		printf("RX: There are no free descriptors!\n");
-		return;
-	}
-
 	// Get the destination of the buffer in DRAM
 	dma_addr_t data_addr = gem_rx_dma_desc0_get_addr(dma_desc_0);
 	// Get length from BRAM
@@ -134,18 +202,61 @@ rx(int q)
 	printf("RX: [%p] 0:0x%08x 1:0x%08x addr=0x%08x len=%d meta=0x%08x\n",
 		dma_descp, dma_desc_0, dma_desc_1, data_addr, data_length, meta_desc);
 #endif
-	sp_rx_data_dma_start(data_addr, data_length);
-	for (;;) {
-		uint32_t status = sp_rx_data_dma_status();
-		if (status == 0)
-			break;
-	}
 
+#ifdef DMA_PROF_RX
+	uint64_t cycle_start;
+	uint64_t cycle_stop;
+	uint64_t time_start;
+	uint64_t time_stop;
+	cycle_start = csr_read_cycle();
+	time_start = csr_read_time();
+#endif
+	sp_rx_data_dma_start(data_addr, data_length);
+	int niters;
+	for (niters = 0;; niters++) {
+		uint32_t status = sp_rx_data_dma_status();
+		if (status == 0) {
+#ifdef DMA_PROF_RX
+			cycle_stop = csr_read_cycle();
+			time_stop = csr_read_time();
+#endif
+			break;
+		}
+	}
+#ifdef DMA_PROF_RX
+	if (dma_prof_rx_cur_packet_size == data_length) {
+		dma_prof_result_eval(&dma_prof_result_rx, cycle_stop - cycle_start);
+		if (dma_prof_rx_cur_samplen == DMA_PROF_NSAMPLES - 1) {
+			dma_prof_result_eval_final(&dma_prof_result_rx);
+			printf("%d ", dma_prof_rx_cur_packet_size);
+			dma_prof_result_print(&dma_prof_result_rx);
+			dma_prof_result_reset(&dma_prof_result_rx);
+			dma_prof_rx_cur_samplen = 0;
+			if (dma_prof_rx_cur_packet_size == DMA_PROF_MAX_PACKET_SIZE) {
+				printf("--------\n");
+			}
+			dma_prof_rx_cur_packet_size += 4;
+		}
+		else {
+			dma_prof_rx_cur_samplen++;
+		}
+	}
+#ifdef DEBUG
+	printf("Iterations=%d\n", niters);
+	printf("Cycle_start=%" PRIu64 "\n", cycle_start);
+	printf("Cycle_stop=%" PRIu64 "\n", cycle_stop);
+	printf("time_start=%" PRIu64 "\n", time_start);
+	printf("time_stop=%" PRIu64 "\n", time_stop);
+	printf("RX DMA took %" PRIu64 " cycles\n", cycle_stop - cycle_start);
+	printf("RX DMA took %" PRIu64 " times\n", time_stop - time_start);
+#endif
+#endif
+
+	// Set all the other parameters.
+	*(dma_descp + 1) = meta_desc;
 	// Update DRAM descriptor to be valid
 	dma_desc_0 |= 1 << GEM_RX_DD0_VALID_BITN;
 	*(dma_descp + 0) = dma_desc_0;
-	// Set all the other parameters.
-	*(dma_descp + 1) = meta_desc;
 #ifdef DEBUG_VERBOSE
 	printf("Value 0x%08x written to %p\n", dma_desc_0, dma_descp);
 	printf("Value 0x%08x written to %p\n", meta_desc, dma_descp + 1);
@@ -158,7 +269,6 @@ rx(int q)
 	else {
 		queue->cur_rx_dma_desc_addr += 2;
 	}
-	nrxdescs++;
 
 	// Send the RX done interrupt
 	gem_rx_done(q);
@@ -236,18 +346,63 @@ tx(int q)
 #endif
 
 		bool eof = (dma_desc_1 & (1 << GEM_TX_DD1_EOF_BITN)) != 0;
+#ifdef DMA_PROF_TX
+		uint64_t cycle_start;
+		uint64_t cycle_stop;
+		uint64_t time_start;
+		uint64_t time_stop;
+		cycle_start = csr_read_cycle();
+		time_start = csr_read_time();
+#endif
 		uint32_t count;
 		for (;;) {
 			count = sp_tx_data_count();
-			if (((1 << 16)/8 - count) >= data_length)
+			if (config.tx_data_fifo_size - count >= data_length)
 				break;
 		}
+
 		sp_tx_data_dma_start(data_addr, (uint32_t)!eof << 31 | data_length);
-		for (;;) {
+		int niters;
+		for (niters = 0;; niters++) {
 			uint32_t status = sp_tx_data_dma_status();
-			if (status == 0)
+			if (status == 0) {
+#ifdef DMA_PROF_TX
+				cycle_stop = csr_read_cycle();
+				time_stop = csr_read_time();
+#endif
 				break;
+			}
 		}
+
+#ifdef DMA_PROF_TX
+	if (dma_prof_tx_cur_packet_size == data_length) {
+		dma_prof_result_eval(&dma_prof_result_tx, cycle_stop - cycle_start);
+		if (dma_prof_tx_cur_samplen == DMA_PROF_NSAMPLES) {
+			dma_prof_result_eval_final(&dma_prof_result_tx);
+			printf("%d ", dma_prof_tx_cur_packet_size);
+			dma_prof_result_print(&dma_prof_result_tx);
+			dma_prof_result_reset(&dma_prof_result_tx);
+			dma_prof_tx_cur_samplen = 0;
+			if (dma_prof_tx_cur_packet_size == DMA_PROF_MAX_PACKET_SIZE) {
+				printf("--------\n");
+			}
+			dma_prof_tx_cur_packet_size += 4;
+		}
+		else {
+			dma_prof_tx_cur_samplen++;
+		}
+	}
+#ifdef DEBUG
+	printf("Iterations=%d\n", niters);
+	printf("Cycle_start=%" PRIu64 "\n", cycle_start);
+	printf("Cycle_stop=%" PRIu64 "\n", cycle_stop);
+	printf("time_start=%" PRIu64 "\n", time_start);
+	printf("time_stop=%" PRIu64 "\n", time_stop);
+	printf("TX DMA took %" PRIu64 " cycles\n", cycle_stop - cycle_start);
+	printf("TX DMA took %" PRIu64 " times\n", time_stop - time_start);
+#endif
+#endif
+
 		packet_length += data_length;
 
 		// Do nothing with the data just read
@@ -270,11 +425,8 @@ tx(int q)
 
 			// Store the descriptor in the BRAM
 			sp_tx_meta_push_uint32((uint32_t)no_crc << TX_META_DESC_NO_CRC_BITN | packet_length);
-
-			packet_length = 0;
 			break;
 		}
-
 	}
 	if (ntxdescs > 0) {
 		// Send TX done interrupt
@@ -328,7 +480,7 @@ main()
 	uart_init();
 
 	printf("----\n");
-	printf("GEM Interface firmware version 0.53:main\n");
+	printf("Stream Processor/GEM firmware version 0.57\n");
 	printf("----\n");
 	printf("Waiting for start signal.\n");
 
@@ -358,6 +510,29 @@ main()
 
 	printf("Descriptor base of TX queue 0 is at %p\n", queues[0].tx_dma_desc_base);
 	printf("Descriptor base of TX queue 1 is at %p\n", queues[1].tx_dma_desc_base);
+
+	config.rx_data_fifo_size = sp_load_reg(SP_REGN_RX_DATA_FIFO_SIZE);
+	config.rx_data_fifo_width = sp_load_reg(SP_REGN_RX_DATA_FIFO_WIDTH);
+	printf("RX data FIFO:\n");
+	printf("  Width: %10d\n", config.rx_data_fifo_width);
+	printf("  Size : %10d\n", config.rx_data_fifo_size);
+
+	config.tx_data_fifo_size = sp_load_reg(SP_REGN_TX_DATA_FIFO_SIZE);
+	config.tx_data_fifo_width = sp_load_reg(SP_REGN_TX_DATA_FIFO_WIDTH);
+	printf("TX data FIFO:\n");
+	printf("  Width: %10d\n", config.tx_data_fifo_width);
+	printf("  Size : %10d\n", config.tx_data_fifo_size);
+
+#ifdef DMA_PROF_RX
+	dma_prof_result_reset(&dma_prof_result_rx);
+#endif
+#ifdef DMA_PROF_TX
+	dma_prof_result_reset(&dma_prof_result_tx);
+#endif
+#if defined(DMA_PROF_RX) || defined(DMA_PROF_TX)
+	printf("#nsamples=%d\n", DMA_PROF_NSAMPLES);
+	printf("packet_size min max avg\n");
+#endif
 
 	start();
 	printf("Done.\n");

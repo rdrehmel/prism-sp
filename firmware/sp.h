@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,12 +41,19 @@
 #define SP_FUNCT7_STORE_REG				"0x11"
 #define SP_FUNCT7_INTR					"0x1f"
 
+// This bit marks read-only registers
 #define SP_MMR_R_BITN					8
+
 #define SP_REGN_CONTROL					0
+
 #define SP_REGN_RX_DMA_DESC_BASE_0		(1 << SP_MMR_R_BITN | 0)
 #define SP_REGN_RX_DMA_DESC_BASE_1		(1 << SP_MMR_R_BITN | 1)
 #define SP_REGN_TX_DMA_DESC_BASE_0		(1 << SP_MMR_R_BITN | 2)
 #define SP_REGN_TX_DMA_DESC_BASE_1		(1 << SP_MMR_R_BITN | 3)
+#define SP_REGN_RX_DATA_FIFO_SIZE		(1 << SP_MMR_R_BITN | 4)
+#define SP_REGN_RX_DATA_FIFO_WIDTH		(1 << SP_MMR_R_BITN | 5)
+#define SP_REGN_TX_DATA_FIFO_SIZE		(1 << SP_MMR_R_BITN | 6)
+#define SP_REGN_TX_DATA_FIFO_WIDTH		(1 << SP_MMR_R_BITN | 7)
 
 #define SP_CONTROL_ENABLE_RX_BITN		0
 #define SP_CONTROL_ENABLE_TX_BITN		1
