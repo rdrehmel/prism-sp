@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module sp_unit(
+module sp_unit #(
+	parameter int RX_DATA_FIFO_SIZE,
+	parameter int RX_DATA_FIFO_WIDTH,
+	parameter int TX_DATA_FIFO_SIZE,
+	parameter int TX_DATA_FIFO_WIDTH
+) (
 	input wire logic clk,
 	input wire logic rst,
 	input sp_inputs_t sp_inputs,
@@ -35,13 +40,12 @@ module sp_unit(
 	mmr_intr_interface.master mmr_i
 );
 
+assign gem.tx_r_flushed = '0;
+
 // RX
 localparam int RX_META_FIFO_WIDTH = 32;
-localparam int RX_META_FIFO_DEPTH = 64;
-// SIZE in bytes
-localparam int RX_DATA_FIFO_WIDTH = m_axi_dma_w.AXI_WDATA_WIDTH;
-localparam int RX_DATA_FIFO_SIZE = 2**16;
-localparam int RX_DATA_FIFO_DEPTH = RX_DATA_FIFO_SIZE / RX_DATA_FIFO_WIDTH;
+localparam int RX_META_FIFO_DEPTH = 2048;
+localparam int RX_DATA_FIFO_DEPTH = RX_DATA_FIFO_SIZE / (RX_DATA_FIFO_WIDTH/8);
 
 localparam int RX_META_FIFO_RD_DATA_COUNT_WIDTH = $clog2(RX_META_FIFO_DEPTH) + 1;
 localparam int RX_META_FIFO_WR_DATA_COUNT_WIDTH = $clog2(RX_META_FIFO_DEPTH) + 1;
@@ -50,11 +54,8 @@ localparam int RX_DATA_FIFO_WR_DATA_COUNT_WIDTH = $clog2(RX_DATA_FIFO_DEPTH) + 1
 
 // TX
 localparam int TX_META_FIFO_WIDTH = 32;
-localparam int TX_META_FIFO_DEPTH = 64;
-// SIZE in bytes
-localparam int TX_DATA_FIFO_WIDTH = m_axi_dma_r.AXI_RDATA_WIDTH;
-localparam int TX_DATA_FIFO_SIZE = 2**16;
-localparam int TX_DATA_FIFO_DEPTH = TX_DATA_FIFO_SIZE / TX_DATA_FIFO_WIDTH;
+localparam int TX_META_FIFO_DEPTH = 2048;
+localparam int TX_DATA_FIFO_DEPTH = TX_DATA_FIFO_SIZE / (TX_DATA_FIFO_WIDTH/8);
 
 localparam int TX_META_FIFO_RD_DATA_COUNT_WIDTH = $clog2(TX_META_FIFO_DEPTH) + 1;
 localparam int TX_META_FIFO_WR_DATA_COUNT_WIDTH = $clog2(TX_META_FIFO_DEPTH) + 1;
@@ -818,6 +819,35 @@ gem_rx_w_status_encoder gem_rx_w_status_encoder_inst(
 	.out(gem_rx_w_status_encoded)
 );
 
+var logic rx_data_fifo_has_space_ff;
+var logic rx_data_fifo_state;
+// In number of bytes
+var logic [$clog2(RX_DATA_FIFO_SIZE):0] rx_data_fifo_nfree;
+var logic [13:0] gem_rx_w_status_13_0;
+
+// This state machine checks whether there is enough space in the FIFO at
+//  the start of frame (SOP).
+always_ff @(posedge gem.rx_clock) begin
+	if (!gem.rx_resetn) begin
+		rx_data_fifo_state <= '0;
+	end
+	else begin
+		case (rx_data_fifo_state)
+		1'b0: begin
+			if (gem.rx_w_sop) begin
+				gem_rx_w_status_13_0 <= gem.rx_w_status[13:0];
+				rx_data_fifo_nfree <= RX_DATA_FIFO_SIZE - { rx_data_fifo_w_wr_data_count, {($clog2(RX_DATA_FIFO_WIDTH/8)){1'b0}} };
+				rx_data_fifo_state <= 1'b1;
+			end
+		end
+		1'b1: begin
+			rx_data_fifo_has_space_ff <= rx_data_fifo_nfree >= gem_rx_w_status_13_0;
+			rx_data_fifo_state <= 1'b0;
+		end
+		endcase
+	end
+end
+
 var logic [RX_DATA_FIFO_WIDTH-1:0] rx_cur_buf_comb;
 var logic [RX_DATA_FIFO_WIDTH-1:0] rx_cur_buf_ff;
 // A bit that is set represents a byte that is not valid.
@@ -856,6 +886,7 @@ always_ff @(posedge gem.rx_clock) begin
 	// Unpulse
 	rx_meta_fifo_w.wr_en <= 1'b0;
 	rx_data_fifo_w.wr_en <= 1'b0;
+	gem.rx_w_overflow <= 1'b0;
 
 	if (!gem.rx_resetn) begin
 		rx_cur_buf_idx[0] <= 1'b1;
@@ -869,14 +900,17 @@ always_ff @(posedge gem.rx_clock) begin
 			};
 		end
 		if (gem.rx_w_eop) begin
-			rx_meta_fifo_w.wr_en <= 1'b1;
+			rx_meta_fifo_w.wr_en <= rx_data_fifo_has_space_ff;
 			rx_meta_fifo_w.wr_data <= gem_rx_w_status_encoded;
 
 			rx_cur_buf_idx[0] <= 1'b1;
 			rx_cur_buf_idx[(RX_DATA_FIFO_WIDTH/8)-1:1] <= '0;
 		end
+		// If we have a full rx_buf_cur or this is the last write, store what we have
+		// in the RX data FIFO.
 		if (gem.rx_w_eop || (gem.rx_w_wr & rx_cur_buf_idx[(RX_DATA_FIFO_WIDTH/8)-1])) begin
-			rx_data_fifo_w.wr_en <= 1'b1;
+			rx_data_fifo_w.wr_en <= rx_data_fifo_has_space_ff;
+			gem.rx_w_overflow <= ~rx_data_fifo_has_space_ff & gem.rx_w_eop;
 		end
 	end
 end
@@ -892,6 +926,7 @@ var logic [TX_PACKET_BYTE_COUNT_WIDTH-1:0] tx_packet_byte_count_comb;
 
 // Only two states: idle (0) and not idle (1).
 var logic tx_state = 1'b0;
+var logic tx_last_byte_comb;
 
 always_comb begin
 	tx_packet_byte_count_comb = tx_packet_byte_count_ff;
@@ -911,6 +946,7 @@ always_comb begin
 			end
 		end
 	end
+	tx_last_byte_comb = ~|tx_packet_byte_count_ff[$bits(tx_packet_byte_count_ff)-1:1] & tx_packet_byte_count_ff[0];
 end
 
 assign gem.tx_r_err = 1'b0;
@@ -918,12 +954,9 @@ assign gem.tx_r_underflow = 1'b0;
 
 var logic [TX_DATA_FIFO_WIDTH-1:0] tx_cur_buf;
 var logic [(TX_DATA_FIFO_WIDTH/8)-1:0] tx_cur_buf_valid;
-var logic tx_last_byte_ff;
 
 always_ff @(posedge gem.tx_clock) begin
 	tx_packet_byte_count_ff <= tx_packet_byte_count_comb;
-	// This is just "tx_last_byte_ff = tx_packet_byte_count_ff == 1;"
-	tx_last_byte_ff = ~|tx_packet_byte_count_ff[$bits(tx_packet_byte_count_ff)-1:1] & tx_packet_byte_count_ff[0];
 
 	if (!gem.tx_resetn) begin
 	end
@@ -946,6 +979,7 @@ always_ff @(posedge gem.tx_clock) begin
 				tx_data_fifo_r.rd_en <= 1'b1;
 				tx_cur_buf <= tx_data_fifo_r.rd_data;
 				tx_cur_buf_valid <= '1;
+
 			end
 		end
 		else begin
@@ -966,7 +1000,7 @@ always_ff @(posedge gem.tx_clock) begin
 				begin
 					tx_cur_buf <= tx_data_fifo_r.rd_data;
 					tx_cur_buf_valid <= '1;
-					tx_data_fifo_r.rd_en <= ~tx_last_byte_ff;
+					tx_data_fifo_r.rd_en <= ~tx_last_byte_comb;
 				end
 				else begin
 					// Shift the TX buffer right by 8 bits.
@@ -980,11 +1014,8 @@ always_ff @(posedge gem.tx_clock) begin
 				// it will be 1'b1 only the first time we come around
 				// here.
 				gem.tx_r_sop <= gem.tx_r_data_rdy;
-
-				if (tx_last_byte_ff) begin
-					gem.tx_r_eop <= 1'b1;
-					tx_state <= 1'b0;
-				end
+				gem.tx_r_eop <= tx_last_byte_comb;
+				tx_state <= ~tx_last_byte_comb;
 			end
 		end
 	end
@@ -1088,8 +1119,8 @@ xpm_fifo_async #(
 	.WAKEUP_TIME(0),
 	.WRITE_DATA_WIDTH(RX_DATA_FIFO_WIDTH),
 	// GEM RX clock domain
-	.WR_DATA_COUNT_WIDTH(1)
-	//.WR_DATA_COUNT_WIDTH(RX_DATA_FIFO_WR_DATA_COUNT_WIDTH)
+	//.WR_DATA_COUNT_WIDTH(1)
+	.WR_DATA_COUNT_WIDTH(RX_DATA_FIFO_WR_DATA_COUNT_WIDTH)
 ) rx_data_fifo (
 	// reset is synchronized to wr_clk!
 	.rst(~gem.rx_resetn),
