@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  */
 import mmr_config::*;
 
-module axi_lite_mmr#(
+module axi_lite_mmr #(
 	parameter int REG_WIDTH = 32,
 	parameter int IBRAM_SIZE,
-	parameter int DBRAM_SIZE
-)
-(
+	parameter int DBRAM_SIZE,
+	parameter int RX_DATA_FIFO_SIZE,
+	parameter int RX_DATA_FIFO_WIDTH,
+	parameter int TX_DATA_FIFO_SIZE,
+	parameter int TX_DATA_FIFO_WIDTH
+) (
 	input wire logic clock,
 	input wire logic reset_n,
 
@@ -147,14 +150,22 @@ always_ff @(posedge clock) begin
 		got_w_hshake <= 1'b0;
 		axi_awaddr <= '0;
 		axi_wdata <= '0;
+
 		for (int i = 0; i < mmr_rw.NREGS; i++)
 			mmr_rw.data[i] <= '0;
+
 		for (int i = 0; i < mmr_r.NREGS; i++)
 			mmr_r.data[i] <= '0;
+		mmr_r.data[MMR_R_REGN_RX_DATA_FIFO_SIZE] <= RX_DATA_FIFO_SIZE;
+		mmr_r.data[MMR_R_REGN_RX_DATA_FIFO_WIDTH] <= RX_DATA_FIFO_WIDTH;
+		mmr_r.data[MMR_R_REGN_TX_DATA_FIFO_SIZE] <= TX_DATA_FIFO_SIZE;
+		mmr_r.data[MMR_R_REGN_TX_DATA_FIFO_WIDTH] <= TX_DATA_FIFO_WIDTH;
+
 		for (int i = 0; i < mmr_i.N; i++) begin
 			mmr_i.isr[i] <= '0;
 			mmr_i.imr[i] <= '0;
 		end
+
 		instruction_bram_mmr.en <= 1'b0;
 		data_bram_mmr.en <= 1'b0;
 	end
@@ -219,6 +230,7 @@ always_comb begin
 		axi_rdata_next[31] = cpu_reset_ff;
 		axi_rdata_next[30:0] = mmr_rw.data[MMR_RW_REGN_CONTROL];
 	end
+
 	REGOFF_RX_DMA_DESC_BASE + SIZEOF_REG*0: begin
 		axi_rdata_next = mmr_r.data[MMR_R_REGN_RX_DMA_DESC_BASE_0];
 	end

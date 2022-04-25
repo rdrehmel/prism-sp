@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,11 @@ typedef enum int {
 	MMR_R_REGN_RX_DMA_DESC_BASE_0,
 	MMR_R_REGN_RX_DMA_DESC_BASE_1,
 	MMR_R_REGN_TX_DMA_DESC_BASE_0,
-	MMR_R_REGN_TX_DMA_DESC_BASE_1
+	MMR_R_REGN_TX_DMA_DESC_BASE_1,
+	MMR_R_REGN_RX_DATA_FIFO_SIZE,
+	MMR_R_REGN_RX_DATA_FIFO_WIDTH,
+	MMR_R_REGN_TX_DATA_FIFO_SIZE,
+	MMR_R_REGN_TX_DATA_FIFO_WIDTH
 } mmr_r_n;
 
 localparam int SIZEOF_REG = 4;
@@ -44,7 +48,7 @@ localparam logic [MMR_RANGE_WIDTH-1:0] REGOFF_IMR_BASE			= 10'h140;
 localparam logic [MMR_RANGE_WIDTH-1:0] REGOFF_ISR_BASE			= 10'h160;
 
 localparam int MMR_RW_NREGS = 1;
-localparam int MMR_R_NREGS = 4;
+localparam int MMR_R_NREGS = 8;
 localparam int MMR_R_BITN = 8;
 
 endpackage
