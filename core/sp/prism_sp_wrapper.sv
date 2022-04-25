@@ -484,7 +484,7 @@ taiga #(
 	.rst(cpu_reset),
 	.mmr_rw(mmr_rw),
 	.mmr_r(mmr_r),
-	.mmr_i(mmr_i)
+	.mmr_i(mmr_i),
 	.*
 );
 
