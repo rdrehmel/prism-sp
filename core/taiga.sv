@@ -24,7 +24,12 @@ import taiga_config::*;
 import riscv_types::*;
 import taiga_types::*;
 
-module taiga (
+module taiga #(
+	parameter int RX_DATA_FIFO_SIZE,
+	parameter int RX_DATA_FIFO_WIDTH,
+	parameter int TX_DATA_FIFO_SIZE,
+	parameter int TX_DATA_FIFO_WIDTH
+) (
 	input logic clk,
 	input logic rst,
 
@@ -223,7 +228,12 @@ module taiga (
     endgenerate
 
 	generate if (USE_SP)
-		sp_unit sp_unit_block(.*,
+		sp_unit #(
+			.RX_DATA_FIFO_SIZE(RX_DATA_FIFO_SIZE),
+			.RX_DATA_FIFO_WIDTH(RX_DATA_FIFO_WIDTH),
+			.TX_DATA_FIFO_SIZE(TX_DATA_FIFO_SIZE),
+			.TX_DATA_FIFO_WIDTH(TX_DATA_FIFO_WIDTH)
+		) sp_unit_block(.*,
 			.issue(unit_issue[SP_UNIT_WB_ID]),
 			.wb(unit_wb[SP_UNIT_WB_ID]),
 			.sp_inputs(sp_inputs)

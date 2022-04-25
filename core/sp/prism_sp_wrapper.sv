@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Robert Drehmel
+ * Copyright (c) 2021,2022 Robert Drehmel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,11 @@ import taiga_types::*;
 import l2_config_and_types::*;
 
 module prism_sp_wrapper #(
-	parameter int RX_META_FIFO_READ_WIDTH = 32,
-	parameter int RX_META_FIFO_WRITE_WIDTH = 32,
+	parameter int IBRAM_SIZE = 2**15,
+	parameter int DBRAM_SIZE = 2**15,
+	parameter int RX_DATA_FIFO_SIZE = 2**16,
+	parameter int TX_DATA_FIFO_SIZE = 2**16,
+
 	parameter int C_M_AXI_IO_ADDR_WIDTH = 32,
 	parameter int C_M_AXI_IO_DATA_WIDTH = 32,
 	parameter int C_M_AXI_DMA_ADDR_WIDTH = 32,
@@ -215,6 +218,13 @@ module prism_sp_wrapper #(
 	input wire gem_rx_w_flush
 );
 
+localparam int IBRAM_WIDTH = 32;
+localparam int DBRAM_WIDTH = 32;
+localparam int RX_META_FIFO_WIDTH = 32;
+localparam int RX_DATA_FIFO_WIDTH = C_M_AXI_DMA_DATA_WIDTH;
+localparam int TX_META_FIFO_WIDTH = 32;
+localparam int TX_DATA_FIFO_WIDTH = C_M_AXI_DMA_DATA_WIDTH;
+
 `ifdef TRACE_SIGNALS
 trace_outputs_t tr;
 assign e_operand_stall = tr.events.operand_stall;
@@ -384,12 +394,12 @@ assign gem.rx_w_err = gem_rx_w_err;
 assign gem_rx_w_overflow = gem.rx_w_overflow;
 assign gem.rx_w_flush = gem_rx_w_flush;
 
-fifo_write_interface #(.DATA_WIDTH(RX_META_FIFO_WRITE_WIDTH)) rx_data_fifo_write_mon();
+fifo_write_interface #(.DATA_WIDTH(RX_META_FIFO_WIDTH)) rx_data_fifo_write_mon();
 assign rx_data_fifo_write_wr_en = rx_data_fifo_write_mon.wr_en;
 assign rx_data_fifo_write_wr_data = rx_data_fifo_write_mon.wr_data;
 assign rx_data_fifo_write_almost_full = rx_data_fifo_write_mon.almost_full;
 assign rx_data_fifo_write_full = rx_data_fifo_write_mon.full;
-fifo_read_interface #(.DATA_WIDTH(RX_META_FIFO_READ_WIDTH)) rx_data_fifo_read_mon();
+fifo_read_interface #(.DATA_WIDTH(RX_META_FIFO_WIDTH)) rx_data_fifo_read_mon();
 assign rx_data_fifo_read_rd_en = rx_data_fifo_read_mon.rd_en;
 assign rx_data_fifo_read_rd_data = rx_data_fifo_read_mon.rd_data;
 assign rx_data_fifo_read_almost_empty = rx_data_fifo_read_mon.almost_empty;
@@ -434,16 +444,15 @@ mmr_intr_interface #(.N(NGEMQUEUES),.WIDTH(32)) mmr_i();
 
 assign gem_irq = |mmr_i.interrupts;
 
-localparam int IBRAM_SIZE = 32 * 1024;
-localparam int IBRAM_WIDTH = 32;
-localparam int DBRAM_SIZE = 32 * 1024;
-localparam int DBRAM_WIDTH = 32;
-
 wire logic cpu_reset;
 
 axi_lite_mmr #(
 	.IBRAM_SIZE(IBRAM_SIZE),
-	.DBRAM_SIZE(DBRAM_SIZE)
+	.DBRAM_SIZE(DBRAM_SIZE),
+	.RX_DATA_FIFO_SIZE(RX_DATA_FIFO_SIZE),
+	.RX_DATA_FIFO_WIDTH(RX_DATA_FIFO_WIDTH),
+	.TX_DATA_FIFO_SIZE(TX_DATA_FIFO_SIZE),
+	.TX_DATA_FIFO_WIDTH(TX_DATA_FIFO_WIDTH)
 )
 axi_lite_mmr_inst(
 	.clock(clock),
@@ -465,12 +474,17 @@ axi_lite_mmr_inst(
 	.data_bram_mmr(data_bram_mmr)
 );
 
-taiga cpu(
+taiga #(
+	.RX_DATA_FIFO_SIZE(RX_DATA_FIFO_SIZE),
+	.RX_DATA_FIFO_WIDTH(RX_DATA_FIFO_WIDTH),
+	.TX_DATA_FIFO_SIZE(TX_DATA_FIFO_SIZE),
+	.TX_DATA_FIFO_WIDTH(TX_DATA_FIFO_WIDTH)
+) cpu(
 	.clk(clock),
 	.rst(cpu_reset),
 	.mmr_rw(mmr_rw),
 	.mmr_r(mmr_r),
-	.mmr_i(mmr_i),
+	.mmr_i(mmr_i)
 	.*
 );
 
