@@ -66,6 +66,7 @@ wire logic [13:0] rx_w_frame_length = rx_w_status[13:0];
 
 var logic [1:0] add_match;
 always_comb begin
+	add_match = '0;
 	case (1'b1)
 	rx_w_add_match4: add_match = 2'b11;
 	rx_w_add_match3: add_match = 2'b10;
@@ -76,6 +77,7 @@ end
 
 var logic [1:0] typeid_match;
 always_comb begin
+	typeid_match = '0;
 	case (1'b1)
 	rx_w_type_match4: typeid_match = 2'b11;
 	rx_w_type_match3: typeid_match = 2'b10;
@@ -86,10 +88,10 @@ end
 
 var logic [1:0] chksum_enc;
 always_comb begin
-	if ((rx_w_checksumu|rx_w_checksumt|rx_w_checksumi) == 1'b0) begin
-		chksum_enc = 2'b00;
-	end
-	else if (rx_w_checksumi & ~(rx_w_checksumu|rx_w_checksumt)) begin
+	// if ((rx_w_checksumu|rx_w_checksumt|rx_w_checksumi) == 1'b0) begin
+	chksum_enc = 2'b00;
+
+	if (rx_w_checksumi & ~(rx_w_checksumu|rx_w_checksumt)) begin
 		chksum_enc = 2'b01;
 	end
 	else if (rx_w_checksumi & rx_w_checksumt) begin
