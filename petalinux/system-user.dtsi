@@ -1,0 +1,28 @@
+/include/ "system-conf.dtsi"
+/ {
+	chosen {
+		bootargs = "console=ttyPS0,115200n8 earlycon clk_ignore_unused cpuidle.off=1";
+	};
+
+	prism_sp_duo_tx_3: prism_sp_duo_tx_0@a0006000 {
+		compatible = "xlnx,prism-sp-duo-tx-1.0";
+		reg = <0x0 0xa0006000 0x0 0x1000>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 90 4>;
+		io_axi_axcache = "0000";
+		dma_axi_axcache = "1111";
+	};
+	prism_sp_duo_rx_3: prism_sp_duo_rx_0@a0007000 {
+		compatible = "xlnx,prism-sp-duo-rx-1.0";
+		reg = <0x0 0xa0007000 0x0 0x1000>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 91 4>;
+		io_axi_axcache = "0000";
+		dma_axi_axcache = "1111";
+	};
+};
+
+&gem3 {
+	prism-sp-tx = <&prism_sp_duo_tx_3>;
+	prism-sp-rx = <&prism_sp_duo_rx_3>;
+};
